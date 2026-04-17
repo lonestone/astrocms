@@ -1,0 +1,25 @@
+---
+import { getCollection, render } from 'astro:content'
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import { mdxComponents } from '../../components'
+import { langs } from '../../i18n'
+
+export async function getStaticPaths() {
+  const paths = []
+  for (const lang of langs) {
+    const pages = await getCollection('pages', (p) => p.id.endsWith(`/${lang}`))
+    const home = pages.find((p) => p.id.startsWith('home/'))
+    if (home) {
+      paths.push({ params: { lang }, props: { page: home, lang } })
+    }
+  }
+  return paths
+}
+
+const { page, lang } = Astro.props
+const { Content } = await render(page)
+---
+
+<BaseLayout title={page.data.title} lang={lang}>
+  <Content components={mdxComponents} />
+</BaseLayout>

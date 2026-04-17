@@ -1,0 +1,21 @@
+services:
+  cms:
+    build: .
+    ports:
+      - '4001:4001'
+    environment:
+      - CMS_PORT=4001
+      - CMS_PASSWORD=${CMS_PASSWORD}
+      - GIT_PAT=${GIT_PAT}
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_BRANCH=${GIT_BRANCH:-main}
+      - GIT_USER_EMAIL=${GIT_USER_EMAIL:-cms@astrocms.dev}
+      - GIT_USER_NAME=${GIT_USER_NAME:-AstroCMS}
+    volumes:
+      - app-data:/app
+      - claude-auth:/root/.claude
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  claude-auth:

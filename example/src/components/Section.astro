@@ -1,0 +1,16 @@
+---
+interface Props {
+  variant?: 'light' | 'dark'
+}
+
+const { variant = 'light' } = Astro.props
+const classes = `p-8 my-4 rounded-lg [&>*:first-child]:!mt-0 ${
+  variant === 'dark'
+    ? 'bg-gray-900 text-white'
+    : 'bg-gray-100 text-gray-900'
+}`
+---
+
+<section class={classes}>
+  <slot />
+</section>

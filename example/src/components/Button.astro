@@ -1,0 +1,20 @@
+---
+interface Props {
+  label: string
+  href?: string
+  variant?: 'dark' | 'light'
+}
+
+const { label, href, variant = 'dark' } = Astro.props
+const classes = `inline-block px-5 py-2 rounded-md text-[0.95rem] cursor-pointer no-underline border-none ${
+  variant === 'light'
+    ? 'bg-white text-gray-900'
+    : 'bg-gray-900 text-white'
+}`
+---
+
+{href ? (
+  <a href={href} class={classes}>{label}</a>
+) : (
+  <button class={classes}>{label}</button>
+)}

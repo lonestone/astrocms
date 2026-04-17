@@ -1,0 +1,35 @@
+---
+import { getCollection, render } from 'astro:content'
+import { Image } from 'astro:assets'
+import BaseLayout from '../../../layouts/BaseLayout.astro'
+import { mdxComponents } from '../../../components'
+import { langs } from '../../../i18n'
+
+export async function getStaticPaths() {
+  const paths = []
+  for (const lang of langs) {
+    const posts = await getCollection('blog', (p) => p.id.endsWith(`/${lang}`))
+    for (const post of posts) {
+      paths.push({
+        params: { lang, slug: post.id.replace(`/${lang}`, '') },
+        props: { post, lang },
+      })
+    }
+  }
+  return paths
+}
+
+const { post, lang } = Astro.props
+const { Content } = await render(post)
+---
+
+<BaseLayout title={post.data.title} lang={lang}>
+  {post.data.image && (
+    <Image src={post.data.image} alt={post.data.title} class="w-screen max-w-none -mt-10 -mx-6 sm:-mx-[calc((100vw-48rem)/2+1.5rem)] h-72 object-cover mb-8" />
+  )}
+  <h1 class="text-3xl font-bold mb-2">{post.data.title}</h1>
+  {post.data.description && <p class="text-gray-500 mb-2">{post.data.description}</p>}
+  <time class="text-sm text-gray-400">{post.data.date.toLocaleDateString()}</time>
+  <hr class="my-6 border-gray-200" />
+  <Content components={mdxComponents} />
+</BaseLayout>

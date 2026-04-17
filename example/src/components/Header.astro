@@ -1,0 +1,23 @@
+---
+import { langs, defaultLang, getTranslations, type Lang } from '../i18n'
+
+interface Props {
+  lang?: Lang
+}
+
+const { lang = defaultLang } = Astro.props
+const t = await getTranslations(lang)
+const otherLangs = langs.filter((l) => l !== lang)
+---
+
+<header class="flex items-center justify-between px-8 py-4 border-b border-gray-200">
+  <a href={`/${lang}/`} class="font-bold text-lg no-underline text-gray-900">AstroCMS Example</a>
+  <nav class="flex gap-4">
+    <a href={`/${lang}/`} class="text-gray-600 hover:text-gray-900">{t.home}</a>
+    <a href={`/${lang}/blog`} class="text-gray-600 hover:text-gray-900">{t.blog}</a>
+    <a href="/terms" class="text-gray-600 hover:text-gray-900">{t.terms}</a>
+    {otherLangs.map((l) => (
+      <a href={`/${l}/`} class="text-gray-400 hover:text-gray-900 font-medium">{l.toUpperCase()}</a>
+    ))}
+  </nav>
+</header>

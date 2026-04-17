@@ -1,0 +1,20 @@
+{
+  "name": "astrocms-example",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "cms": "astrocms",
+    "cms:dev": "astrocms --dev"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^5.0.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "astro": "^6.0.6",
+    "astrocms": "*",
+    "tailwindcss": "^4.2.2",
+    "unist-util-visit": "^5.1.0"
+  }
+}

@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+/* Markdown styles (applied to elements with .md class, added by rehype plugin) */
+h1.md {
+  @apply mt-10 mb-5 text-4xl font-bold;
+}
+h2.md {
+  @apply mt-10 mb-4 text-3xl font-medium;
+}
+h3.md {
+  @apply mt-10 mb-3 text-2xl font-medium;
+}
+h4.md {
+  @apply mt-8 mb-3 text-xl font-medium;
+}
+p.md {
+  @apply mb-5 leading-relaxed;
+}
+ul.md {
+  @apply mb-5 list-disc pl-6;
+}
+ol.md {
+  @apply mb-5 list-decimal pl-6;
+}
+li.md {
+  @apply mb-1;
+}
+code.md {
+  @apply rounded bg-gray-100 px-1.5 py-0.5 text-sm;
+}
+pre.md {
+  @apply mb-5 overflow-x-auto rounded-lg bg-gray-900 p-5 text-gray-200;
+}
+pre.md code {
+  @apply bg-transparent p-0;
+}
+a.md {
+  @apply text-blue-600 underline underline-offset-2;
+}
+blockquote.md {
+  @apply my-5 border-l-3 border-gray-600 bg-gray-50 p-4 text-lg italic text-gray-500;
+}
+blockquote.md p:last-child {
+  @apply mb-0;
+}
+table.md {
+  @apply my-8 block overflow-x-auto border-collapse -mx-6 px-6 sm:mx-0 sm:px-0;
+  max-width: 100vw;
+}
+th.md {
+  @apply border-b-2 border-gray-200 bg-gray-50 px-5 py-3 text-left font-semibold;
+}
+td.md {
+  @apply border-b border-gray-100 px-5 py-3;
+}
+hr.md {
+  @apply my-8 border-gray-200;
+}

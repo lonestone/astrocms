@@ -1,0 +1,60 @@
+---
+title: Markdown Showcase
+description: Demonstrating images, tables, and code blocks
+date: 2024-02-15
+image: ./thumbnail.jpg
+---
+
+This post demonstrates all the content types you can use in your blog posts.
+
+## Images
+
+Co-located images are stored right next to your MDX files and optimized automatically by Astro.
+
+![A mountain lake at sunrise](./lake.jpg)
+
+Here is another image showing a peaceful meadow:
+
+![A green meadow under blue sky](./meadow.jpg)
+
+## Comparison Table
+
+| Feature         | AstroCMS           | Traditional CMS |
+| --------------- | ------------------ | --------------- |
+| Content format  | MDX files in Git   | Database        |
+| Version control | Built-in (Git)     | Plugin required |
+| Deployment      | Static or SSR      | Server required |
+| AI assistant    | Claude integration | Not available   |
+| Customization   | Full code access   | Theme-based     |
+
+## Code Example
+
+Here is a minimal Astro component:
+
+```html
+---
+interface Props {
+  title: string
+  count?: number
+}
+
+const { title, count = 0 } = Astro.props
+---
+
+<div class="card">
+  <h2>{title}</h2>
+  <p>Count: {count}</p>
+</div>
+```
+
+And a TypeScript helper:
+
+```typescript
+function getSlugFromId(id: string): string {
+  return id.split('/')[0]
+}
+
+function getLangFromId(id: string): string {
+  return id.split('/')[1]
+}
+```
