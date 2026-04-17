@@ -16,7 +16,7 @@ import { componentsRoutes } from './routes/components.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const config = await loadConfig()
 
-const port = parseInt(process.env.CMS_PORT || '4001')
+const port = parseInt(process.env.ASTROCMS_PORT || '4001')
 
 const app = new Hono()
 

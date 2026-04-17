@@ -1,6 +1,7 @@
 ## General rules
 
 - Never read `.env`. You can read `.env.example`.
+- Don't co-author git commits with Claude.
 
 ## Tech stack
 
@@ -27,5 +28,11 @@
 ## Guidelines
 
 - Use Tailwind CSS for frontend styling. No raw CSS except in styles.css.
-- Project paths (`contentDir`, `contentConfig`, `assetsDir`, `componentsDir`) are configured in `astrocms.json` only. Env vars are for deployment settings (`CMS_PORT`, `GIT_*`, etc.).
+- Project paths (`contentDir`, `contentConfig`, `assetsDir`, `componentsDir`) are configured in `astrocms.json` only. Env vars are for deployment settings (`ASTROCMS_PORT`, `GIT_*`, etc.).
 - `ROOT_DIR` always points to the target Astro project root, resolved from `ASTROCMS_ROOT` env var or `process.cwd()`.
+
+## Content style
+
+- Never use em dashes. Use other formulations instead.
+- Prefer positive formulations over negative ones. Instead of "X, pas Y" or "ne pas Z", reformulate positively (e.g. "rester indépendant" instead of "ne pas dépendre", "dès le premier sprint" instead of "pas à la fin").
+- Avoid label-colon patterns like "Objectif :", "Résultat :", "Avantage :". Integrate the information directly in the phrase.

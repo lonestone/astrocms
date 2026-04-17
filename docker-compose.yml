@@ -4,8 +4,8 @@ services:
     ports:
       - '4001:4001'
     environment:
-      - CMS_PORT=4001
-      - CMS_PASSWORD=${CMS_PASSWORD}
+      - ASTROCMS_PORT=4001
+      - ASTROCMS_PASSWORD=${ASTROCMS_PASSWORD}
       - GIT_PAT=${GIT_PAT}
       - GIT_REPO_URL=${GIT_REPO_URL}
       - GIT_BRANCH=${GIT_BRANCH:-main}

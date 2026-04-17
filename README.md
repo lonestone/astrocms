@@ -1,45 +1,109 @@
 # AstroCMS
 
-A web-based CMS for Astro content collections. Edit MDX content, manage frontmatter, browse files, commit and push changes via git, and optionally use Claude as an AI assistant.
+A simple, database-free CMS for [Astro](https://astro.build) static websites with first-class MDX support.
+
+AstroCMS edits your Markdown and MDX files directly, manages media assets, commits and pushes to your GitHub repository, and ships with an optional Claude Code integration for AI-assisted authoring.
+
+## Why AstroCMS
+
+- **No database.** Your content lives in your repo as Markdown/MDX — AstroCMS just edits the files.
+- **Git-native workflow.** Changes are staged, committed, and pushed to GitHub directly from the UI.
+- **Schema-aware.** Frontmatter forms are auto-generated from the Zod schemas in your `content.config.ts`.
+- **MDX-ready.** Edit rich MDX visually, including your own Astro components with typed props and slots.
+- **AI built in.** Optional Claude Code agent for drafting, rewriting, and fixing content.
 
 ## Features
 
-- Visual MDX editor with frontmatter form (auto-generated from Zod schemas in `content.config.ts`)
-- File tree browser for Astro content collections
-- Astro component discovery with prop/slot editing
-- Git integration (status, diff, stage, commit, push)
-- Claude Code agent integration (optional)
-- Media upload
+- **Visual MDX editor** with a frontmatter form generated from your Zod collection schemas
+- **File tree browser** for all Astro content collections
+- **Astro component discovery** — insert your own components into MDX with prop and slot editing
+- **Media upload** to your configured assets directory
+- **Git integration** — status, diff, stage, commit, and push without leaving the browser
+- **Claude Code agent** (optional) for AI-assisted writing and editing
+- **Password protection** for deployed instances
 
-## Usage
+## Requirements
 
-### As an npm package
+- Node.js 20+
+- An Astro project with content collections (`src/content.config.ts`)
 
-Install in your Astro project:
+## Quickstart
+
+Setup takes two steps. Really.
+
+### Option 1 — as a project dependency
+
+Install it, then add a script:
 
 ```bash
 npm install astrocms
 ```
 
-Add a script to your `package.json`:
-
 ```json
 {
   "scripts": {
-    "cms": "astrocms"
+    "astrocms": "astrocms"
   }
 }
 ```
 
-Run it:
+Run it from your project:
 
 ```bash
-npm run cms
+npm run astrocms
 ```
 
-The CMS starts on `http://localhost:4001` and operates on your project directory.
+### Option 2 — global install
 
-### With Docker
+Install once, use on any Astro project:
+
+```bash
+npm install -g astrocms
+```
+
+Then, from any Astro project directory:
+
+```bash
+astrocms
+```
+
+AstroCMS operates on the current working directory (or the path in `ASTROCMS_ROOT`). Either way, it starts on `http://localhost:4001`.
+
+## Configuration
+
+AstroCMS reads an optional `astrocms.json` at the project root:
+
+```json
+{
+  "contentDir": "src/content",
+  "contentConfig": "src/content.config.ts",
+  "assetsDir": "src/assets",
+  "componentsDir": "src/components"
+}
+```
+
+All fields are optional.
+
+| Field | Purpose | Default |
+|---|---|---|
+| `contentDir` | Directory containing your content collections | `src/content` |
+| `contentConfig` | Path to the Zod schema file | `src/content.config.ts` |
+| `assetsDir` | Where uploaded media is written | *(uploads disabled)* |
+| `componentsDir` | Astro components available in the MDX editor | *(components disabled)* |
+
+Environment variables (deployment-only, not in `astrocms.json`):
+
+| Env var | Description | Default |
+|---|---|---|
+| `ASTROCMS_PORT` | Server port | `4001` |
+| `ASTROCMS_PASSWORD` | Optional password protection | *(none)* |
+| `GIT_REPO_URL` | Git repo URL (Docker mode) | *(auto-detected)* |
+| `GIT_BRANCH` | Git branch | `main` |
+| `GIT_PAT` | GitHub Personal Access Token | *(none)* |
+| `GIT_USER_EMAIL` | Git commit email | `cms@astrocms.dev` |
+| `GIT_USER_NAME` | Git commit author | `AstroCMS` |
+
+## Deploying with Docker
 
 Use the provided Docker image to clone and serve a git-hosted Astro project:
 
@@ -53,10 +117,10 @@ Configure via `.env` (see `.env.example`):
 GIT_REPO_URL=https://github.com/user/repo
 GIT_BRANCH=main
 GIT_PAT=ghp_xxx
-CMS_PASSWORD=secret
+ASTROCMS_PASSWORD=secret
 ```
 
-The `app-data` volume is persistent: if a clone already exists at startup, it will be reused instead of re-cloned.
+The `app-data` volume is persistent: if a clone already exists at startup, it is reused instead of re-cloned.
 
 ### Generating a GitHub PAT
 
@@ -72,53 +136,21 @@ The `app-data` volume is persistent: if a clone already exists at startup, it wi
 
 No other permissions are needed.
 
-## Configuration
+## Contributing
 
-AstroCMS reads an optional `astrocms.json` at the project root:
+Want to hack on AstroCMS itself? See [DEVELOPMENT.md](./DEVELOPMENT.md).
 
-```json
-{
-  "contentDir": "src/content",
-  "contentConfig": "src/content.config.ts",
-  "assetsDir": "src/assets",
-  "componentsDir": "src/components"
-}
-```
+## Tech stack
 
-All fields are optional. Defaults: `contentDir` = `src/content`, `contentConfig` = `src/content.config.ts`. `assetsDir` and `componentsDir` are disabled by default.
+- **Backend:** [Hono](https://hono.dev) on Node
+- **Frontend:** React 19 + [Vite](https://vitejs.dev) + [Tailwind CSS](https://tailwindcss.com)
+- **Editor:** [MDXEditor](https://mdxeditor.dev) with schema-driven frontmatter
+- **AI:** [Claude Code](https://claude.com/claude-code) via `ai-sdk-provider-claude-code`
 
-Environment variables (not in `astrocms.json`):
+## License
 
-| Env var | Description | Default |
-|---|---|---|
-| `CMS_PORT` | Server port | `4001` |
-| `CMS_PASSWORD` | Optional password protection | (none) |
-| `GIT_REPO_URL` | Git repo URL (Docker mode) | (auto-detected) |
-| `GIT_BRANCH` | Git branch | `main` |
-| `GIT_PAT` | GitHub Personal Access Token | (none) |
-| `GIT_USER_EMAIL` | Git commit email | `cms@astrocms.dev` |
-| `GIT_USER_NAME` | Git commit author | `AstroCMS` |
+MIT © Lonestone
 
-## Development
+---
 
-```bash
-# Install dependencies
-npm install
-
-# Run the example site with CMS
-cd example
-npm run cms
-```
-
-## Project structure
-
-```
-packages/astrocms/   # The CMS package
-  server.ts          # Hono backend
-  config.ts          # Config loader (astrocms.json + env vars)
-  routes/            # API routes
-  frontend/          # React + Vite SPA
-  bin/astrocms.js    # CLI entry point
-example/             # Minimal Astro site using astrocms
-Dockerfile           # Docker image
-```
+AstroCMS is a non-profit, open-source project. AstroCMS and Lonestone are not affiliated with, endorsed by, or sponsored by The Astro Technology Company; this project simply targets the open-source Astro framework.
