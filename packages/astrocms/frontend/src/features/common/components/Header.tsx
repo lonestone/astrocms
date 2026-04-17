@@ -19,7 +19,7 @@ export function Header({
 
   return (
     <header className="h-12 border-b border-border flex items-center justify-between px-4 bg-white shrink-0">
-      <span className="font-semibold text-sm">CMS</span>
+      <span className="font-semibold text-sm">AstroCMS</span>
       <div className="flex gap-2">
         <a
           href={astroUrl}

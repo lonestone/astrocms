@@ -6,11 +6,18 @@ import { loadConfig } from '../config.js'
 import { parseContentSchemas } from './schema.js'
 
 // Cache parsed schemas (parsed once, invalidated on server restart)
-let schemasCache: Record<string, any[]> | undefined
+let schemasCache:
+  | { schemas: Record<string, any[]>; error?: string }
+  | undefined
 
 async function getSchemas() {
   if (!schemasCache) {
-    schemasCache = await parseContentSchemas()
+    try {
+      schemasCache = { schemas: await parseContentSchemas() }
+    } catch (err) {
+      console.error('[astrocms] Failed to parse content schemas:', err)
+      schemasCache = { schemas: {}, error: err instanceof Error ? err.message : String(err) }
+    }
   }
   return schemasCache
 }
@@ -37,20 +44,26 @@ fileRoutes.get('/', async (c) => {
     return c.json({ error: 'Invalid path' }, 400)
   }
 
+  const config = await loadConfig()
+  const fullPath = join(ROOT_DIR, config.contentDir, filePath)
+
+  let content: string
   try {
-    const config = await loadConfig()
-    const fullPath = join(ROOT_DIR, config.contentDir, filePath)
-    const content = await readFile(fullPath, 'utf-8')
-
-    // Include frontmatter schema if the file belongs to a known collection
-    const schemas = await getSchemas()
-    const collection = getCollectionFromPath(filePath, schemas)
-    const frontmatterSchema = collection ? schemas[collection] : undefined
-
-    return c.json({ path: filePath, content, frontmatterSchema })
-  } catch {
-    return c.json({ error: 'File not found' }, 404)
+    content = await readFile(fullPath, 'utf-8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return c.json({ error: 'File not found' }, 404)
+    }
+    console.error('[astrocms] Failed to read file:', fullPath, err)
+    return c.json({ error: 'Failed to read file' }, 500)
   }
+
+  // Include frontmatter schema if the file belongs to a known collection
+  const { schemas, error: schemaError } = await getSchemas()
+  const collection = getCollectionFromPath(filePath, schemas)
+  const frontmatterSchema = collection ? schemas[collection] : undefined
+
+  return c.json({ path: filePath, content, frontmatterSchema, schemaError })
 })
 
 // Write a file (path is relative to CONTENT_DIR)

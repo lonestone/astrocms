@@ -27,6 +27,7 @@ export interface FileResponse {
   path: string
   content: string
   frontmatterSchema?: FrontmatterFieldSchema[]
+  schemaError?: string
 }
 
 export async function fetchFile(path: string): Promise<FileResponse> {

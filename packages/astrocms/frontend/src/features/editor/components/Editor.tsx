@@ -170,6 +170,12 @@ export function Editor({ tree, onSelectFile }: Props) {
         onSave={handleSave}
         onSelectFile={onSelectFile}
       />
+      {fileData?.schemaError && (
+        <div className="mb-2 px-3 py-2 rounded-md border border-yellow-400 bg-yellow-50 text-sm text-yellow-900">
+          <span className="font-semibold">Schema parsing failed:</span>{' '}
+          {fileData.schemaError}
+        </div>
+      )}
       <div className="flex-1 flex flex-col border border-border rounded-md overflow-auto bg-bg">
         {error ? (
           <div className="p-5 text-red-500">File not found: {filePath}</div>
