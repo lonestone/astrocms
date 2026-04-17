@@ -129,13 +129,20 @@ export async function startClaudeLogin(): Promise<LoginResult> {
   return res.json()
 }
 
-export interface LoginWaitResult {
+export interface LoginCodeResult {
   account?: ClaudeStatus['account']
   error?: string
 }
 
-export async function waitClaudeLogin(): Promise<LoginWaitResult> {
-  const res = await fetch(`${BASE}/claude/login/wait`, { method: 'POST' })
+export async function submitClaudeLoginCode(
+  code: string,
+  state: string
+): Promise<LoginCodeResult> {
+  const res = await fetch(`${BASE}/claude/login/code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state }),
+  })
   return res.json()
 }
 

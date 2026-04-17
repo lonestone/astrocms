@@ -175,14 +175,19 @@ claudeRoutes.post('/login', async (c) => {
   }
 })
 
-// Wait for OAuth flow to complete (called after user opens login URL)
-claudeRoutes.post('/login/wait', async (c) => {
+// Submit the code+state pasted by the user after authorizing on manualUrl
+claudeRoutes.post('/login/code', async (c) => {
   if (!loginQuery) {
     return c.json({ error: 'No login in progress' }, 400)
   }
 
+  const body = await c.req.json<{ code?: string; state?: string }>()
+  if (!body.code || !body.state) {
+    return c.json({ error: 'Missing code or state' }, 400)
+  }
+
   try {
-    const result = await loginQuery.claudeOAuthWaitForCompletion()
+    const result = await loginQuery.claudeOAuthCallback(body.code, body.state)
     cleanupLoginQuery()
     statusCache = null
     return c.json(result)

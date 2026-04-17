@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { startClaudeLogin, waitClaudeLogin } from '../../../api.js'
+import { startClaudeLogin, submitClaudeLoginCode } from '../../../api.js'
 import { RiLoginBoxLine, RiRefreshLine, RiLoader4Line } from 'react-icons/ri'
 
 interface Props {
@@ -8,44 +8,65 @@ interface Props {
   onRetry: () => void
 }
 
+type Status = 'idle' | 'starting' | 'awaiting_code' | 'submitting' | 'error'
+
 export function AgentAuthError({ error, onRetry }: Props) {
-  const [status, setStatus] = useState<
-    'idle' | 'starting' | 'waiting' | 'error'
-  >('idle')
+  const [status, setStatus] = useState<Status>('idle')
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [pasted, setPasted] = useState('')
   const queryClient = useQueryClient()
 
-  async function handleLogin() {
+  async function handleStart() {
     setStatus('starting')
     setLoginError(null)
+    setPasted('')
 
     try {
       const result = await startClaudeLogin()
-
       if (result.error) {
         setLoginError(result.error)
         setStatus('error')
         return
       }
 
-      // Open the login URL in a new tab
-      const url = result.automaticUrl || result.manualUrl
-      if (url) {
-        window.open(url, '_blank')
-      }
+      // Manual flow: open the URL where Claude will show the code+state
+      const url = result.manualUrl || result.automaticUrl
+      if (url) window.open(url, '_blank')
 
-      // Wait for the OAuth flow to complete
-      setStatus('waiting')
-      const waitResult = await waitClaudeLogin()
+      setStatus('awaiting_code')
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Login failed')
+      setStatus('error')
+    }
+  }
 
-      if (waitResult.error) {
-        setLoginError(waitResult.error)
+  async function handleSubmit() {
+    const trimmed = pasted.trim()
+    if (!trimmed) return
+
+    // Claude returns the code as `code#state`
+    const hashIdx = trimmed.indexOf('#')
+    if (hashIdx === -1) {
+      setLoginError('Invalid code format. Expected `code#state`.')
+      setStatus('error')
+      return
+    }
+
+    const code = trimmed.slice(0, hashIdx)
+    const state = trimmed.slice(hashIdx + 1)
+
+    setStatus('submitting')
+    setLoginError(null)
+
+    try {
+      const result = await submitClaudeLoginCode(code, state)
+      if (result.error) {
+        setLoginError(result.error)
         setStatus('error')
         return
       }
-
-      // Login succeeded — refresh status
       setStatus('idle')
+      setPasted('')
       queryClient.invalidateQueries({ queryKey: ['claude-status'] })
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : 'Login failed')
@@ -53,45 +74,72 @@ export function AgentAuthError({ error, onRetry }: Props) {
     }
   }
 
-  const isLoading = status === 'starting' || status === 'waiting'
+  const isLoading = status === 'starting' || status === 'submitting'
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4 text-center">
       <div className="text-text-muted text-xs space-y-2">
-        <p className="font-semibold text-sm text-text">
-          Claude not connected
-        </p>
-        {(loginError || error) && status !== 'waiting' && (
+        <p className="font-semibold text-sm text-text">Claude not connected</p>
+        {(loginError || error) && status !== 'awaiting_code' && (
           <p className="text-[11px] bg-bg-hover rounded p-2 text-left break-words max-h-24 overflow-y-auto">
             {loginError || error}
           </p>
         )}
-        {status === 'waiting' && (
+        {status === 'awaiting_code' && (
           <p className="text-[11px]">
-            Complete the login in the browser tab, then come back here.
+            Authorize in the new tab, copy the code shown by Claude, and paste it below.
           </p>
         )}
       </div>
 
-      <button
-        onClick={handleLogin}
-        disabled={isLoading}
-        className="flex items-center justify-center gap-2 w-full py-2 text-xs font-semibold rounded-md bg-primary text-white hover:opacity-90 cursor-pointer disabled:opacity-70 disabled:cursor-default"
-        aria-label="Login with Claude"
-        tabIndex={0}
-      >
-        {isLoading ? (
-          <>
-            <RiLoader4Line size={14} className="animate-spin" />
-            {status === 'starting' ? 'Starting login...' : 'Waiting for login...'}
-          </>
-        ) : (
-          <>
-            <RiLoginBoxLine size={14} />
-            Login with Claude
-          </>
-        )}
-      </button>
+      {status === 'awaiting_code' || status === 'submitting' ? (
+        <div className="flex flex-col gap-2 w-full">
+          <input
+            type="text"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="Paste the code here"
+            disabled={status === 'submitting'}
+            className="w-full px-2 py-1.5 text-xs rounded-md border border-border bg-bg-hover focus:outline-none focus:border-primary"
+            autoFocus
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!pasted.trim() || status === 'submitting'}
+            className="flex items-center justify-center gap-2 w-full py-2 text-xs font-semibold rounded-md bg-primary text-white hover:opacity-90 cursor-pointer disabled:opacity-70 disabled:cursor-default"
+            tabIndex={0}
+          >
+            {status === 'submitting' ? (
+              <>
+                <RiLoader4Line size={14} className="animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              'Submit code'
+            )}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleStart}
+          disabled={isLoading}
+          className="flex items-center justify-center gap-2 w-full py-2 text-xs font-semibold rounded-md bg-primary text-white hover:opacity-90 cursor-pointer disabled:opacity-70 disabled:cursor-default"
+          aria-label="Login with Claude"
+          tabIndex={0}
+        >
+          {isLoading ? (
+            <>
+              <RiLoader4Line size={14} className="animate-spin" />
+              Starting login...
+            </>
+          ) : (
+            <>
+              <RiLoginBoxLine size={14} />
+              Login with Claude
+            </>
+          )}
+        </button>
+      )}
 
       {!isLoading && (
         <button
