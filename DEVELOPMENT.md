@@ -69,4 +69,5 @@ See the [README](./README.md#deploying-with-docker) for the env vars and PAT set
 
 - `ASTROCMS_ROOT` — target Astro project root. Defaults to `process.cwd()`. The CLI sets it automatically for the running process.
 - `ASTROCMS_DEV` — set to `1` by the CLI when `--dev` is passed; the backend skips static serving so Vite can own the frontend.
-- `ASTROCMS_PORT`, `ASTROCMS_PASSWORD`, `GIT_*` — see the [README](./README.md#configuration).
+- `ASTROCMS_PASSWORD`, `GIT_*`, and `ASTROCMS_*` config overrides — see the [README](./README.md#configuration).
+- Port selection — pass `--port <n>` to the CLI (`astrocms --port 5000`). Defaults to `4001`.

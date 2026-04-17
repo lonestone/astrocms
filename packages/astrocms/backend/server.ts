@@ -12,11 +12,20 @@ import { gitRoutes } from './routes/git.js'
 import { claudeRoutes } from './routes/claude.js'
 import { uploadRoutes } from './routes/upload.js'
 import { componentsRoutes } from './routes/components.js'
+import { configRoutes } from './routes/config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const config = await loadConfig()
 
-const port = parseInt(process.env.ASTROCMS_PORT || '4001')
+function parsePortArg(argv: string[]): number | null {
+  const i = argv.indexOf('--port')
+  if (i >= 0 && argv[i + 1]) return parseInt(argv[i + 1])
+  const eq = argv.find((a) => a.startsWith('--port='))
+  if (eq) return parseInt(eq.slice('--port='.length))
+  return null
+}
+
+const port = parsePortArg(process.argv) ?? 4001
 
 const app = new Hono()
 
@@ -29,6 +38,7 @@ app.route('/api/git', gitRoutes)
 app.route('/api/claude', claudeRoutes)
 app.route('/api/upload', uploadRoutes)
 app.route('/api/components', componentsRoutes)
+app.route('/api/config', configRoutes)
 
 // Serve content files (images, media) from the content directory
 // URL /content/foo.jpg -> {ROOT_DIR}/{contentDir}/foo.jpg

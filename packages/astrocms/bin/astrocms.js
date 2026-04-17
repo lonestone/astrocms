@@ -10,13 +10,24 @@ const pkgRoot = resolve(__dirname, '..')
 const projectRoot = process.env.ASTROCMS_ROOT || process.cwd()
 const isDev = process.argv.includes('--dev')
 
+function parsePort(argv) {
+  const i = argv.indexOf('--port')
+  if (i >= 0 && argv[i + 1]) return argv[i + 1]
+  const eq = argv.find((a) => a.startsWith('--port='))
+  if (eq) return eq.slice('--port='.length)
+  return null
+}
+
+const portArg = parsePort(process.argv)
+const serverArgs = portArg ? ['--port', portArg] : []
+
 const env = { ...process.env, ASTROCMS_ROOT: projectRoot }
 
 if (isDev) {
   // Dev mode: backend API only (no static serving) + frontend vite dev (HMR)
   const devEnv = { ...env, ASTROCMS_DEV: '1' }
 
-  const server = spawn('npx', ['tsx', 'watch', resolve(pkgRoot, 'backend/server.ts')], {
+  const server = spawn('npx', ['tsx', 'watch', resolve(pkgRoot, 'backend/server.ts'), ...serverArgs], {
     cwd: projectRoot,
     env: devEnv,
     stdio: 'inherit',
@@ -43,7 +54,7 @@ if (isDev) {
   }
 
   console.log(`Starting AstroCMS for project: ${projectRoot}`)
-  const server = spawn('node', ['--import', 'tsx', resolve(pkgRoot, 'backend/server.ts')], {
+  const server = spawn('node', ['--import', 'tsx', resolve(pkgRoot, 'backend/server.ts'), ...serverArgs], {
     cwd: projectRoot,
     env,
     stdio: 'inherit',

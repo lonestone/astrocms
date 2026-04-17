@@ -67,7 +67,11 @@ Then, from any Astro project directory:
 astrocms
 ```
 
-AstroCMS operates on the current working directory (or the path in `ASTROCMS_ROOT`). Either way, it starts on `http://localhost:4001`.
+AstroCMS operates on the current working directory (or the path in `ASTROCMS_ROOT`). Either way, it starts on `http://localhost:4001`. Pass `--port <n>` to listen on a different port:
+
+```bash
+astrocms --port 5000
+```
 
 ## Configuration
 
@@ -78,7 +82,8 @@ AstroCMS reads an optional `astrocms.json` at the project root:
   "contentDir": "src/content",
   "contentConfig": "src/content.config.ts",
   "assetsDir": "src/assets",
-  "componentsDir": "src/components"
+  "componentsDir": "src/components",
+  "websiteUrl": "http://localhost:4321"
 }
 ```
 
@@ -88,14 +93,24 @@ All fields are optional.
 |---|---|---|
 | `contentDir` | Directory containing your content collections | `src/content` |
 | `contentConfig` | Path to the Zod schema file | `src/content.config.ts` |
-| `assetsDir` | Where uploaded media is written | *(uploads disabled)* |
-| `componentsDir` | Astro components available in the MDX editor | *(components disabled)* |
+| `assetsDir` | Where uploaded media is written. If unset, uploads are disabled and the directory is never scanned. | *(uploads disabled)* |
+| `componentsDir` | Astro components available in the MDX editor. If unset, component discovery is skipped entirely. | *(components disabled)* |
+| `websiteUrl` | URL opened by the header "Preview" button. If unset, the button is hidden. | *(hidden)* |
 
-Environment variables (deployment-only, not in `astrocms.json`):
+Any `astrocms.json` field can also be set via environment variable. Env values override the JSON file when both are present. This is useful for Docker deployments where the config lives outside the container image.
+
+| Env var | Overrides |
+|---|---|
+| `ASTROCMS_CONTENT_DIR` | `contentDir` |
+| `ASTROCMS_CONTENT_CONFIG` | `contentConfig` |
+| `ASTROCMS_ASSETS_DIR` | `assetsDir` |
+| `ASTROCMS_COMPONENTS_DIR` | `componentsDir` |
+| `ASTROCMS_WEBSITE_URL` | `websiteUrl` |
+
+Deployment-only environment variables:
 
 | Env var | Description | Default |
 |---|---|---|
-| `ASTROCMS_PORT` | Server port | `4001` |
 | `ASTROCMS_PASSWORD` | Optional password protection | *(none)* |
 | `GIT_REPO_URL` | Git repo URL (Docker mode) | *(auto-detected)* |
 | `GIT_BRANCH` | Git branch | `main` |
@@ -120,7 +135,7 @@ GIT_PAT=ghp_xxx
 ASTROCMS_PASSWORD=secret
 ```
 
-The `app-data` volume is persistent: if a clone already exists at startup, it is reused instead of re-cloned.
+The `app-data` volume is persistent: if a clone already exists at startup, it is reused instead of re-cloned. The container always serves on port `4001` internally; change the host-side mapping in `docker-compose.yml` to expose it elsewhere.
 
 ### Generating a GitHub PAT
 

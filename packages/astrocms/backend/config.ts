@@ -7,16 +7,28 @@ export interface AstroCmsConfig {
   contentConfig: string
   assetsDir?: string
   componentsDir?: string
+  websiteUrl?: string
 }
 
-const defaults: AstroCmsConfig = {
-  contentDir: 'src/content',
-  contentConfig: 'src/content.config.ts',
-  assetsDir: undefined,
-  componentsDir: undefined,
-}
+const envOverrides = {
+  contentDir: 'ASTROCMS_CONTENT_DIR',
+  contentConfig: 'ASTROCMS_CONTENT_CONFIG',
+  assetsDir: 'ASTROCMS_ASSETS_DIR',
+  componentsDir: 'ASTROCMS_COMPONENTS_DIR',
+  websiteUrl: 'ASTROCMS_WEBSITE_URL',
+} as const
 
 let cached: AstroCmsConfig | null = null
+
+function pick(
+  key: keyof typeof envOverrides,
+  fileValue: string | undefined,
+  defaultValue?: string,
+): string | undefined {
+  const fromEnv = process.env[envOverrides[key]]
+  if (fromEnv && fromEnv.length > 0) return fromEnv
+  return fileValue ?? defaultValue
+}
 
 export async function loadConfig(): Promise<AstroCmsConfig> {
   if (cached) return cached
@@ -30,10 +42,11 @@ export async function loadConfig(): Promise<AstroCmsConfig> {
   }
 
   cached = {
-    contentDir: fileConfig.contentDir || defaults.contentDir,
-    contentConfig: fileConfig.contentConfig || defaults.contentConfig,
-    assetsDir: fileConfig.assetsDir || defaults.assetsDir,
-    componentsDir: fileConfig.componentsDir || defaults.componentsDir,
+    contentDir: pick('contentDir', fileConfig.contentDir, 'src/content')!,
+    contentConfig: pick('contentConfig', fileConfig.contentConfig, 'src/content.config.ts')!,
+    assetsDir: pick('assetsDir', fileConfig.assetsDir),
+    componentsDir: pick('componentsDir', fileConfig.componentsDir),
+    websiteUrl: pick('websiteUrl', fileConfig.websiteUrl),
   }
 
   return cached

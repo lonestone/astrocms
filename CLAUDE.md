@@ -28,7 +28,7 @@
 ## Guidelines
 
 - Use Tailwind CSS for frontend styling. No raw CSS except in styles.css.
-- Project paths (`contentDir`, `contentConfig`, `assetsDir`, `componentsDir`) are configured in `astrocms.json` only. Env vars are for deployment settings (`ASTROCMS_PORT`, `GIT_*`, etc.).
+- Project config (`contentDir`, `contentConfig`, `assetsDir`, `componentsDir`, `websiteUrl`) lives in `astrocms.json`. Each field can be overridden via env (`ASTROCMS_CONTENT_DIR`, `ASTROCMS_WEBSITE_URL`, etc.). Deployment-only env vars: `ASTROCMS_PASSWORD`, `GIT_*`. Port is selected via the `--port` CLI flag.
 - `ROOT_DIR` always points to the target Astro project root, resolved from `ASTROCMS_ROOT` env var or `process.cwd()`.
 
 ## Content style

@@ -1,5 +1,6 @@
 {
   "contentDir": "src/content",
   "contentConfig": "src/content.config.ts",
-  "componentsDir": "src/components"
+  "componentsDir": "src/components",
+  "websiteUrl": "http://localhost:4321"
 }

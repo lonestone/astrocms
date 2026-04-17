@@ -4,13 +4,17 @@ services:
     ports:
       - '4001:4001'
     environment:
-      - ASTROCMS_PORT=4001
       - ASTROCMS_PASSWORD=${ASTROCMS_PASSWORD}
       - GIT_PAT=${GIT_PAT}
       - GIT_REPO_URL=${GIT_REPO_URL}
       - GIT_BRANCH=${GIT_BRANCH:-main}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL:-cms@astrocms.dev}
       - GIT_USER_NAME=${GIT_USER_NAME:-AstroCMS}
+      - ASTROCMS_CONTENT_DIR=${ASTROCMS_CONTENT_DIR}
+      - ASTROCMS_CONTENT_CONFIG=${ASTROCMS_CONTENT_CONFIG}
+      - ASTROCMS_ASSETS_DIR=${ASTROCMS_ASSETS_DIR}
+      - ASTROCMS_COMPONENTS_DIR=${ASTROCMS_COMPONENTS_DIR}
+      - ASTROCMS_WEBSITE_URL=${ASTROCMS_WEBSITE_URL}
     volumes:
       - app-data:/app
       - claude-auth:/root/.claude

@@ -1,5 +1,14 @@
 const BASE = '/api'
 
+export interface PublicConfig {
+  websiteUrl?: string
+}
+
+export async function fetchPublicConfig(): Promise<PublicConfig> {
+  const res = await fetch(`${BASE}/config`)
+  return res.json()
+}
+
 export interface TreeNode {
   name: string
   path: string
