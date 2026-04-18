@@ -117,23 +117,33 @@ function resolveType(
   return { type: 'string' }
 }
 
-// Parse all <slot> tags from the template part (after the second ---)
-// Returns slot names. Empty string "" represents the default (unnamed) slot.
+// Parse slot names from an Astro component source.
+// Detects both <slot> tags in the template and Astro.slots.render/has calls
+// in the frontmatter. Empty string "" represents the default (unnamed) slot.
 function parseSlots(source: string): string[] {
+  const fmMatch = source.match(/^---\n([\s\S]*?)\n---/)
+  const frontmatter = fmMatch ? fmMatch[1] : ''
   const parts = source.split('---')
   const template = parts.slice(2).join('---')
 
   const slots: string[] = []
+  const add = (name: string) => {
+    const normalized = name === 'default' ? '' : name
+    if (!slots.includes(normalized)) slots.push(normalized)
+  }
 
-  const re = /<slot([\s/][^>]*)?>/g
-  let match
-  while ((match = re.exec(template)) !== null) {
-    const rest = match[1] || ''
+  const tagRe = /<slot([\s/][^>]*)?>/g
+  let tagMatch
+  while ((tagMatch = tagRe.exec(template)) !== null) {
+    const rest = tagMatch[1] || ''
     const nameMatch = rest.match(/name=["']([^"']+)["']/)
-    const name = nameMatch ? nameMatch[1] : ''
-    if (!slots.includes(name)) {
-      slots.push(name)
-    }
+    add(nameMatch ? nameMatch[1] : '')
+  }
+
+  const apiRe = /Astro\.slots\.(?:render|has)\s*\(\s*["']([^"']+)["']/g
+  let apiMatch
+  while ((apiMatch = apiRe.exec(frontmatter)) !== null) {
+    add(apiMatch[1])
   }
 
   return slots
