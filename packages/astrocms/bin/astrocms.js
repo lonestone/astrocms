@@ -4,6 +4,7 @@ import { execSync, spawn } from 'child_process'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
+import dotenv from 'dotenv'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const pkgRoot = resolve(__dirname, '..')
@@ -21,6 +22,7 @@ function parsePort(argv) {
 const portArg = parsePort(process.argv)
 const serverArgs = portArg ? ['--port', portArg] : []
 
+dotenv.config({ path: resolve(projectRoot, '.env'), quiet: true })
 const env = { ...process.env, ASTROCMS_ROOT: projectRoot }
 
 if (isDev) {

@@ -1,11 +1,58 @@
 const BASE = '/api'
 
+const AUTH_EVENT = 'astrocms-auth-required'
+
+export function onAuthRequired(listener: () => void): () => void {
+  window.addEventListener(AUTH_EVENT, listener)
+  return () => window.removeEventListener(AUTH_EVENT, listener)
+}
+
+async function authFetch(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const res = await fetch(`${BASE}${path}`, init)
+  if (res.status === 401) {
+    window.dispatchEvent(new Event(AUTH_EVENT))
+  }
+  return res
+}
+
+export interface AuthStatus {
+  required: boolean
+  authenticated: boolean
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const res = await authFetch(`/auth/status`)
+  return res.json()
+}
+
+export async function login(
+  password: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await authFetch(`/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    return { ok: false, error: data?.error ?? 'Login failed' }
+  }
+  return { ok: true }
+}
+
+export async function logout(): Promise<void> {
+  await authFetch('/auth/logout', { method: 'POST' })
+}
+
 export interface PublicConfig {
   websiteUrl?: string
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {
-  const res = await fetch(`${BASE}/config`)
+  const res = await authFetch(`/config`)
   return res.json()
 }
 
@@ -23,7 +70,7 @@ export interface GitFile {
 }
 
 export async function fetchTree(): Promise<TreeNode[]> {
-  const res = await fetch(`${BASE}/tree`)
+  const res = await authFetch(`/tree`)
   return res.json()
 }
 
@@ -40,7 +87,7 @@ export interface FileResponse {
 }
 
 export async function fetchFile(path: string): Promise<FileResponse> {
-  const res = await fetch(`${BASE}/file?path=${encodeURIComponent(path)}`)
+  const res = await authFetch(`/file?path=${encodeURIComponent(path)}`)
   if (!res.ok) throw new Error(`File not found: ${path}`)
   return res.json()
 }
@@ -49,7 +96,7 @@ export async function saveFile(
   path: string,
   content: string
 ): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/file`, {
+  const res = await authFetch(`/file`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, content }),
@@ -58,15 +105,15 @@ export async function saveFile(
 }
 
 export async function fetchGitStatus(): Promise<{ files: GitFile[] }> {
-  const res = await fetch(`${BASE}/git/status`)
+  const res = await authFetch(`/git/status`)
   return res.json()
 }
 
 export async function fetchGitDiff(path?: string): Promise<{ diff: string }> {
   const url = path
-    ? `${BASE}/git/diff?path=${encodeURIComponent(path)}`
-    : `${BASE}/git/diff`
-  const res = await fetch(url)
+    ? `/git/diff?path=${encodeURIComponent(path)}`
+    : `/git/diff`
+  const res = await authFetch(url)
   return res.json()
 }
 
@@ -74,7 +121,7 @@ export async function gitCommit(
   message: string,
   push = false
 ): Promise<{ ok: boolean; commit?: string; error?: string }> {
-  const res = await fetch(`${BASE}/git/commit`, {
+  const res = await authFetch(`/git/commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, push }),
@@ -83,7 +130,7 @@ export async function gitCommit(
 }
 
 export async function gitStage(paths: string[]): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/git/stage`, {
+  const res = await authFetch(`/git/stage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paths }),
@@ -92,7 +139,7 @@ export async function gitStage(paths: string[]): Promise<{ ok: boolean }> {
 }
 
 export async function gitUnstage(paths: string[]): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/git/unstage`, {
+  const res = await authFetch(`/git/unstage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paths }),
@@ -101,7 +148,7 @@ export async function gitUnstage(paths: string[]): Promise<{ ok: boolean }> {
 }
 
 export async function gitDiscard(path: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/git/discard`, {
+  const res = await authFetch(`/git/discard`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -121,9 +168,9 @@ export async function fetchClaudeStatus(
   force = false
 ): Promise<ClaudeStatus> {
   const url = force
-    ? `${BASE}/claude/status?force=true`
-    : `${BASE}/claude/status`
-  const res = await fetch(url)
+    ? `/claude/status?force=true`
+    : `/claude/status`
+  const res = await authFetch(url)
   return res.json()
 }
 
@@ -134,7 +181,7 @@ export interface LoginResult {
 }
 
 export async function startClaudeLogin(): Promise<LoginResult> {
-  const res = await fetch(`${BASE}/claude/login`, { method: 'POST' })
+  const res = await authFetch(`/claude/login`, { method: 'POST' })
   return res.json()
 }
 
@@ -147,7 +194,7 @@ export async function submitClaudeLoginCode(
   code: string,
   state: string
 ): Promise<LoginCodeResult> {
-  const res = await fetch(`${BASE}/claude/login/code`, {
+  const res = await authFetch(`/claude/login/code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, state }),
@@ -166,14 +213,14 @@ export interface Conversation {
 export async function fetchConversations(
   limit = 20
 ): Promise<Conversation[]> {
-  const res = await fetch(`${BASE}/claude/conversations?limit=${limit}`)
+  const res = await authFetch(`/claude/conversations?limit=${limit}`)
   return res.json()
 }
 
 export async function fetchConversationMessages(
   id: string
 ): Promise<any[]> {
-  const res = await fetch(`${BASE}/claude/conversations/${id}/messages`)
+  const res = await authFetch(`/claude/conversations/${id}/messages`)
   return res.json()
 }
 
@@ -193,7 +240,7 @@ export async function respondToPermission(
   behavior: 'allow' | 'deny',
   message?: string
 ): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/claude/permissions/${id}/respond`, {
+  const res = await authFetch(`/claude/permissions/${id}/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ behavior, message }),
@@ -225,7 +272,7 @@ export interface ComponentDescriptor {
 }
 
 export async function fetchComponents(): Promise<ComponentDescriptor[]> {
-  const res = await fetch(`${BASE}/components`)
+  const res = await authFetch(`/components`)
   return res.json()
 }
 
@@ -236,7 +283,7 @@ export async function uploadMedia(
   const formData = new FormData()
   formData.append('file', file)
   formData.append('targetDir', targetDir)
-  const res = await fetch(`${BASE}/upload`, {
+  const res = await authFetch(`/upload`, {
     method: 'POST',
     body: formData,
   })

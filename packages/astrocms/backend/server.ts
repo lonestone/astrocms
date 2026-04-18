@@ -13,6 +13,8 @@ import { claudeRoutes } from './routes/claude.js'
 import { uploadRoutes } from './routes/upload.js'
 import { componentsRoutes } from './routes/components.js'
 import { configRoutes } from './routes/config.js'
+import { authRoutes } from './routes/auth.js'
+import { authMiddleware } from './auth.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const config = await loadConfig()
@@ -31,6 +33,10 @@ const app = new Hono()
 
 app.use('*', cors())
 
+// Auth
+app.use('/api/*', authMiddleware)
+app.route('/api/auth', authRoutes)
+
 // API routes
 app.route('/api/tree', treeRoutes)
 app.route('/api/file', fileRoutes)
@@ -42,6 +48,7 @@ app.route('/api/config', configRoutes)
 
 // Serve content files (images, media) from the content directory
 // URL /content/foo.jpg -> {ROOT_DIR}/{contentDir}/foo.jpg
+app.use('/content/*', authMiddleware)
 app.use(
   '/content/*',
   serveStatic({
@@ -53,6 +60,7 @@ app.use(
 // Serve static assets from assetsDir if configured
 // URL /assets/foo.jpg -> {ROOT_DIR}/{assetsDir}/foo.jpg
 if (config.assetsDir) {
+  app.use('/assets/*', authMiddleware)
   app.use(
     '/assets/*',
     serveStatic({

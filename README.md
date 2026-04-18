@@ -118,6 +118,8 @@ Deployment-only environment variables:
 | `GIT_USER_EMAIL` | Git commit email | `cms@astrocms.dev` |
 | `GIT_USER_NAME` | Git commit author | `AstroCMS` |
 
+A `.env` file at the project root is auto-loaded when running `astrocms` locally. Shell variables take precedence over `.env` values.
+
 ## Deploying with Docker
 
 Use the provided Docker image to clone and serve a git-hosted Astro project:
