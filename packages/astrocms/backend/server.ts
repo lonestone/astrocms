@@ -29,43 +29,55 @@ function parsePortArg(argv: string[]): number | null {
 
 const port = parsePortArg(process.argv) ?? 4001
 
-const app = new Hono()
+const CMS_PREFIX = '/astrocms'
+const devPort = process.env.ASTROCMS_DEV_PORT
 
+// Vite may bind to either IPv4 (127.0.0.1) or IPv6 (::1) depending on the
+// host OS resolution of "localhost". Try both and remember which one answered.
+let preferredDevHost: string | null = null
+function devHostCandidates(): string[] {
+  if (preferredDevHost) return [preferredDevHost]
+  return ['127.0.0.1', '[::1]']
+}
+
+const app = new Hono()
 app.use('*', cors())
 
-// Auth
-app.use('/api/*', authMiddleware)
-app.route('/api/auth', authRoutes)
+const cms = new Hono()
 
-// API routes
-app.route('/api/tree', treeRoutes)
-app.route('/api/file', fileRoutes)
-app.route('/api/git', gitRoutes)
-app.route('/api/claude', claudeRoutes)
-app.route('/api/upload', uploadRoutes)
-app.route('/api/components', componentsRoutes)
-app.route('/api/config', configRoutes)
+cms.use('/api/*', authMiddleware)
+cms.route('/api/auth', authRoutes)
+
+cms.route('/api/tree', treeRoutes)
+cms.route('/api/file', fileRoutes)
+cms.route('/api/git', gitRoutes)
+cms.route('/api/claude', claudeRoutes)
+cms.route('/api/upload', uploadRoutes)
+cms.route('/api/components', componentsRoutes)
+cms.route('/api/config', configRoutes)
 
 // Serve content files (images, media) from the content directory
-// URL /content/foo.jpg -> {ROOT_DIR}/{contentDir}/foo.jpg
-app.use('/content/*', authMiddleware)
-app.use(
+// URL /astrocms/content/foo.jpg -> {ROOT_DIR}/{contentDir}/foo.jpg
+cms.use('/content/*', authMiddleware)
+cms.use(
   '/content/*',
   serveStatic({
     root: join(ROOT_DIR, config.contentDir),
-    rewriteRequestPath: (path) => path.replace(/^\/content\//, '/'),
+    rewriteRequestPath: (path) =>
+      path.replace(new RegExp(`^${CMS_PREFIX}/content/`), '/'),
   })
 )
 
 // Serve static assets from assetsDir if configured
-// URL /assets/foo.jpg -> {ROOT_DIR}/{assetsDir}/foo.jpg
+// URL /astrocms/assets/foo.jpg -> {ROOT_DIR}/{assetsDir}/foo.jpg
 if (config.assetsDir) {
-  app.use('/assets/*', authMiddleware)
-  app.use(
+  cms.use('/assets/*', authMiddleware)
+  cms.use(
     '/assets/*',
     serveStatic({
       root: join(ROOT_DIR, config.assetsDir),
-      rewriteRequestPath: (path) => path.replace(/^\/assets\//, '/'),
+      rewriteRequestPath: (path) =>
+        path.replace(new RegExp(`^${CMS_PREFIX}/assets/`), '/'),
     })
   )
 }
@@ -73,11 +85,66 @@ if (config.assetsDir) {
 const isDev = process.env.ASTROCMS_DEV === '1'
 
 if (!isDev) {
-  // Serve CMS frontend (built files in dist/)
-  app.use('/*', serveStatic({ root: join(__dirname, '..', 'dist') }))
+  // Serve CMS frontend (built files in dist/) scoped under /astrocms
+  cms.use(
+    '/*',
+    serveStatic({
+      root: join(__dirname, '..', 'dist'),
+      rewriteRequestPath: (path) =>
+        path.replace(new RegExp(`^${CMS_PREFIX}`), '') || '/',
+    })
+  )
 
-  // SPA fallback: serve index.html for all non-matched routes
-  app.get('*', serveStatic({ root: join(__dirname, '..', 'dist'), path: 'index.html' }))
+  // SPA fallback: serve index.html for all non-matched CMS routes
+  cms.get(
+    '*',
+    serveStatic({ root: join(__dirname, '..', 'dist'), path: 'index.html' })
+  )
+}
+
+app.route(CMS_PREFIX, cms)
+
+if (devPort) {
+  // Pass-through proxy to the website dev server for any path outside /astrocms
+  app.all('*', async (c) => {
+    const incoming = new URL(c.req.url)
+    const pathAndQuery = incoming.pathname + incoming.search
+    const headers = new Headers(c.req.raw.headers)
+    headers.delete('host')
+    const init: RequestInit & { duplex?: 'half' } = {
+      method: c.req.method,
+      headers,
+      redirect: 'manual',
+    }
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+      init.body = c.req.raw.body as any
+      init.duplex = 'half'
+    }
+    let lastErr: unknown
+    for (const host of devHostCandidates()) {
+      try {
+        const res = await fetch(
+          `http://${host}:${devPort}${pathAndQuery}`,
+          init
+        )
+        preferredDevHost = host
+        const respHeaders = new Headers(res.headers)
+        respHeaders.delete('content-encoding')
+        respHeaders.delete('content-length')
+        return new Response(res.body, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: respHeaders,
+        })
+      } catch (err) {
+        lastErr = err
+      }
+    }
+    const msg = (lastErr as any)?.message ?? String(lastErr)
+    return c.text(`Dev server unavailable on port ${devPort}: ${msg}`, 502)
+  })
+} else {
+  app.get('/', (c) => c.redirect(`${CMS_PREFIX}/`))
 }
 
 const requestedPort = port
@@ -93,8 +160,11 @@ function tryListen(port: number, maxAttempts = 10): void {
     }
   })
   server.on('listening', () => {
-    console.log(`AstroCMS running on http://localhost:${port}`)
+    console.log(`AstroCMS running on http://localhost:${port}${CMS_PREFIX}`)
     console.log(`Project root: ${ROOT_DIR}`)
+    if (devPort) {
+      console.log(`Proxying root to dev server on port ${devPort}`)
+    }
   })
 }
 

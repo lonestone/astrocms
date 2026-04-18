@@ -1,8 +1,8 @@
 /**
  * Resolve a relative image source path to a preview URL served by the CMS.
  *
- * - `./image.png` or `image.png` → `/content/{dir}/image.png`
- * - `../../../assets/images/foo.png` → resolved and served from `/assets/`
+ * - `./image.png` or `image.png` → `/astrocms/content/{dir}/image.png`
+ * - `../../../assets/images/foo.png` → resolved and served from `/astrocms/assets/`
  * - Absolute or http URLs are returned as-is.
  */
 export function resolvePreviewSrc(
@@ -28,14 +28,12 @@ export function resolvePreviewSrc(
 
   const resolvedPath = resolved.join('/')
 
-  // If the path still starts with "content/", serve from /content/
   if (resolvedPath.startsWith('content/')) {
-    return `/${resolvedPath}`
+    return `/astrocms/${resolvedPath}`
   }
 
-  // If it resolved to assets/, serve from /assets/
   if (resolvedPath.startsWith('assets/')) {
-    return `/${resolvedPath}`
+    return `/astrocms/${resolvedPath}`
   }
 
   // Path escaped to an unsupported directory

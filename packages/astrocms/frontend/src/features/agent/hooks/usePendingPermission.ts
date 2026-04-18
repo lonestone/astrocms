@@ -12,7 +12,7 @@ export function usePendingPermission(active: boolean) {
       return
     }
 
-    const eventSource = new EventSource('/api/claude/permissions/events')
+    const eventSource = new EventSource('/astrocms/api/claude/permissions/events')
 
     eventSource.onmessage = (event) => {
       try {

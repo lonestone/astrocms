@@ -1,4 +1,4 @@
-const BASE = '/api'
+const BASE = '/astrocms/api'
 
 const AUTH_EVENT = 'astrocms-auth-required'
 
@@ -48,7 +48,7 @@ export async function logout(): Promise<void> {
 }
 
 export interface PublicConfig {
-  websiteUrl?: string
+  devServer: boolean
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {

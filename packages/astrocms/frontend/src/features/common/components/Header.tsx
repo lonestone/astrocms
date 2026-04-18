@@ -27,9 +27,9 @@ export function Header({
     <header className="h-12 border-b border-border flex items-center justify-between px-4 bg-white shrink-0">
       <span className="font-semibold text-sm">AstroCMS</span>
       <div className="flex gap-2">
-        {config?.websiteUrl && (
+        {config?.devServer && (
           <a
-            href={config.websiteUrl}
+            href="/"
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-1 rounded-md border border-border bg-white text-text no-underline text-xs cursor-pointer hover:bg-gray-100 inline-flex items-center"

@@ -7,7 +7,6 @@ export interface AstroCmsConfig {
   contentConfig: string
   assetsDir?: string
   componentsDir?: string
-  websiteUrl?: string
 }
 
 const envOverrides = {
@@ -15,7 +14,6 @@ const envOverrides = {
   contentConfig: 'ASTROCMS_CONTENT_CONFIG',
   assetsDir: 'ASTROCMS_ASSETS_DIR',
   componentsDir: 'ASTROCMS_COMPONENTS_DIR',
-  websiteUrl: 'ASTROCMS_WEBSITE_URL',
 } as const
 
 let cached: AstroCmsConfig | null = null
@@ -46,7 +44,6 @@ export async function loadConfig(): Promise<AstroCmsConfig> {
     contentConfig: pick('contentConfig', fileConfig.contentConfig, 'src/content.config.ts')!,
     assetsDir: pick('assetsDir', fileConfig.assetsDir),
     componentsDir: pick('componentsDir', fileConfig.componentsDir),
-    websiteUrl: pick('websiteUrl', fileConfig.websiteUrl),
   }
 
   return cached

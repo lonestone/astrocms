@@ -47,7 +47,7 @@ export function getSessionToken(c: Context): string | undefined {
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   if (!isAuthRequired()) return next()
-  if (c.req.path.startsWith('/api/auth/')) return next()
+  if (c.req.path.includes('/api/auth/')) return next()
   const token = getSessionToken(c)
   if (!isValidToken(token)) return c.json({ error: 'Unauthorized' }, 401)
   return next()

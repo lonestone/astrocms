@@ -24,8 +24,8 @@ export function ChatView({
     () =>
       new AssistantChatTransport({
         api: sessionId
-          ? `/api/claude/chat?sessionId=${encodeURIComponent(sessionId)}`
-          : '/api/claude/chat',
+          ? `/astrocms/api/claude/chat?sessionId=${encodeURIComponent(sessionId)}`
+          : '/astrocms/api/claude/chat',
       }),
     [sessionId]
   )

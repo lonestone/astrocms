@@ -199,7 +199,7 @@ function MediaModalOverlay({
 
   const canGoUp = currentDir !== ''
 
-  const previewUrl = (entry: TreeNode) => `/content/${entry.path}`
+  const previewUrl = (entry: TreeNode) => `/astrocms/content/${entry.path}`
 
   const breadcrumb = currentDir || '/'
 
