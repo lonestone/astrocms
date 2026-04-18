@@ -18,8 +18,11 @@ interface FrontmatterFieldSchema {
     | 'image'
     | 'date'
     | 'string-array'
+    | 'object'
   required?: boolean
   options?: string[]
+  itemSchema?: FrontmatterFieldSchema[]
+  children?: FrontmatterFieldSchema[]
 }
 
 // Sentinel symbol to identify image() fields
@@ -140,14 +143,38 @@ function resolveZodField(
     return { name, type: 'select', required, options: inner.options }
   }
 
+  // z.object(...)
+  if (inner instanceof z.ZodObject) {
+    return {
+      name,
+      type: 'object',
+      required,
+      children: parseZodShape(inner as z.ZodObject<z.ZodRawShape>),
+    }
+  }
+
   // z.array(...)
   if (inner instanceof z.ZodArray) {
-    const element = inner.element
-    if (element instanceof z.ZodString) {
+    const element = unwrapOptional(inner.element)
+    if (element instanceof z.ZodString || element instanceof z.ZodUnion) {
       return { name, type: 'string-array', required }
+    }
+    if (element instanceof z.ZodObject) {
+      return {
+        name,
+        type: 'json',
+        required,
+        itemSchema: parseZodShape(element as z.ZodObject<z.ZodRawShape>),
+      }
     }
     return { name, type: 'json', required }
   }
 
   return { name, type: 'string', required }
+}
+
+function unwrapOptional(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (schema instanceof z.ZodOptional) return schema.unwrap()
+  if (schema instanceof z.ZodDefault) return schema._def.innerType
+  return schema
 }

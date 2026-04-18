@@ -74,9 +74,10 @@ export async function fetchTree(): Promise<TreeNode[]> {
   return res.json()
 }
 
-export interface FrontmatterFieldSchema extends PropSchema {
+export interface FrontmatterFieldSchema extends Omit<PropSchema, 'itemSchema'> {
   required?: boolean
   children?: FrontmatterFieldSchema[]
+  itemSchema?: FrontmatterFieldSchema[]
 }
 
 export interface FileResponse {

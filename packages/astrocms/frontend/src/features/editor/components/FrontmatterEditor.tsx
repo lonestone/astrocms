@@ -164,6 +164,20 @@ function FieldGroup({ schema, data, onChange, depth }: FieldGroupProps) {
             </div>
           )
         }
+        if (field.type === 'json' && field.itemSchema) {
+          const raw = data[field.name]
+          const items = (Array.isArray(raw) ? raw : []) as FrontmatterData[]
+          return (
+            <ObjectArrayField
+              key={field.name}
+              name={field.name}
+              items={items}
+              itemSchema={field.itemSchema}
+              onChange={(next) => onChange({ ...data, [field.name]: next })}
+              depth={depth}
+            />
+          )
+        }
         const raw = data[field.name]
         const arrayValue = Array.isArray(raw) ? raw.map(String) : []
         return (
@@ -181,5 +195,68 @@ function FieldGroup({ schema, data, onChange, depth }: FieldGroupProps) {
         )
       })}
     </>
+  )
+}
+
+interface ObjectArrayFieldProps {
+  name: string
+  items: FrontmatterData[]
+  itemSchema: FrontmatterFieldSchema[]
+  onChange: (items: FrontmatterData[]) => void
+  depth: number
+}
+
+function ObjectArrayField({
+  name,
+  items,
+  itemSchema,
+  onChange,
+  depth,
+}: ObjectArrayFieldProps) {
+  const updateItem = (i: number, next: FrontmatterData) => {
+    onChange(items.map((item, j) => (j === i ? next : item)))
+  }
+  const removeItem = (i: number) => {
+    onChange(items.filter((_, j) => j !== i))
+  }
+  const addItem = () => {
+    onChange([...items, {}])
+  }
+  return (
+    <div style={{ paddingLeft: depth > 0 ? 16 : 0 }}>
+      <div className="font-medium text-gray-400 pt-2 pb-0.5">
+        {formatLabel(name)}
+      </div>
+      <div className="flex flex-col gap-1">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className="relative border border-gray-200 rounded-sm pl-1.5 pr-6 py-1 flex flex-col gap-0.5"
+          >
+            <button
+              type="button"
+              onClick={() => removeItem(i)}
+              title="Remove item"
+              className="absolute top-0.5 right-1 bg-transparent border-none cursor-pointer text-gray-300 text-sm leading-none px-0.5 hover:text-gray-500"
+            >
+              ×
+            </button>
+            <FieldGroup
+              schema={itemSchema}
+              data={item}
+              onChange={(next) => updateItem(i, next)}
+              depth={depth + 1}
+            />
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addItem}
+          className="self-start bg-transparent border border-dashed border-gray-300 rounded-sm cursor-pointer text-gray-400 text-2xs px-2 py-px hover:border-gray-400 hover:text-gray-600"
+        >
+          + Add
+        </button>
+      </div>
+    </div>
   )
 }
