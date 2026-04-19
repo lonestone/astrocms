@@ -19,6 +19,8 @@ import EditorHeader from './EditorHeader.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import type { TreeNode } from '../../../api.js'
 import { getLocaleSiblings } from '../../common/utils/folderTarget.js'
+import { getSchemaForFile } from '../../common/utils/collections.js'
+import { useCollections } from '../../sidebar/hooks/useCollections.js'
 import {
   getDataFormat,
   isDataFormat,
@@ -60,8 +62,14 @@ export function Editor({ tree, onSelectFile }: Props) {
   // and re-prepended on save, since MDXEditor does not preserve them
   const esmRef = useRef('')
 
-  // Schema comes from the backend (parsed from content.config.ts)
-  const serverSchema = fileData?.frontmatterSchema
+  // Resolve schema from the collections index (no per-file round trip).
+  const { data: collectionsData } = useCollections()
+  const collections = collectionsData?.collections ?? {}
+  const schemaError = collectionsData?.error
+  const serverSchema = useMemo(
+    () => getSchemaForFile(filePath, collections),
+    [filePath, collections]
+  )
 
   // For data files without an explicit schema, infer fields from data
   const schema = useMemo(() => {
@@ -170,10 +178,10 @@ export function Editor({ tree, onSelectFile }: Props) {
         onSave={handleSave}
         onSelectFile={onSelectFile}
       />
-      {fileData?.schemaError && (
+      {schemaError && (
         <div className="mb-2 px-3 py-2 rounded-md border border-yellow-400 bg-yellow-50 text-sm text-yellow-900">
           <span className="font-semibold">Schema parsing failed:</span>{' '}
-          {fileData.schemaError}
+          {schemaError}
         </div>
       )}
       <div className="flex-1 flex flex-col border border-border rounded-md overflow-auto bg-bg">

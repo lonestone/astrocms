@@ -16,6 +16,7 @@ services:
       - ASTROCMS_COMPONENTS_DIR=${ASTROCMS_COMPONENTS_DIR}
       - ASTROCMS_DEV_CMD=${ASTROCMS_DEV_CMD}
       - ASTROCMS_DEV_PORT=${ASTROCMS_DEV_PORT}
+      - ASTROCMS_INSTALL_CMD=${ASTROCMS_INSTALL_CMD}
     volumes:
       - app-data:/app
       - claude-auth:/root/.claude

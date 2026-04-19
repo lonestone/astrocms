@@ -61,6 +61,7 @@ export interface TreeNode {
   path: string
   type: 'file' | 'directory'
   children?: TreeNode[]
+  sortValue?: unknown
 }
 
 export interface GitFile {
@@ -69,8 +70,16 @@ export interface GitFile {
   path: string
 }
 
-export async function fetchTree(): Promise<TreeNode[]> {
-  const res = await authFetch(`/tree`)
+export async function fetchTree(
+  sorts: { folder: string; field: string }[] = []
+): Promise<TreeNode[]> {
+  const qs = sorts
+    .map(
+      ({ folder, field }) =>
+        `sort=${encodeURIComponent(`${folder}:${field}`)}`
+    )
+    .join('&')
+  const res = await authFetch(qs ? `/tree?${qs}` : `/tree`)
   return res.json()
 }
 
@@ -83,8 +92,6 @@ export interface FrontmatterFieldSchema extends Omit<PropSchema, 'itemSchema'> {
 export interface FileResponse {
   path: string
   content: string
-  frontmatterSchema?: FrontmatterFieldSchema[]
-  schemaError?: string
 }
 
 export async function fetchFile(path: string): Promise<FileResponse> {
@@ -274,6 +281,69 @@ export interface ComponentDescriptor {
 
 export async function fetchComponents(): Promise<ComponentDescriptor[]> {
   const res = await authFetch(`/components`)
+  return res.json()
+}
+
+export async function createFile(
+  path: string,
+  content = ''
+): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const res = await authFetch(`/file/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  })
+  return res.json()
+}
+
+export async function renameFile(
+  from: string,
+  to: string
+): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const res = await authFetch(`/file/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  })
+  return res.json()
+}
+
+export async function duplicateFile(
+  from: string,
+  to: string
+): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const res = await authFetch(`/file/duplicate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  })
+  return res.json()
+}
+
+export async function deleteFile(
+  path: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await authFetch(`/file/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  return res.json()
+}
+
+export interface CollectionInfo {
+  schema: FrontmatterFieldSchema[] | null
+  loader?: 'glob' | 'file'
+  pattern?: string | string[]
+  base?: string
+  filePath?: string
+}
+
+export async function fetchCollections(): Promise<{
+  collections: Record<string, CollectionInfo>
+  error?: string
+}> {
+  const res = await authFetch(`/collections`)
   return res.json()
 }
 

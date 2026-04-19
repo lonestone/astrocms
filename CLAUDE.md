@@ -3,6 +3,7 @@
 - Never read `.env`. You can read `.env.example`.
 - Don't co-author git commits with Claude.
 - Use Tailwind CSS for frontend styling. No raw CSS except in styles.css.
+- Every hook and component should have its own file.
 
 ## Tech stack
 

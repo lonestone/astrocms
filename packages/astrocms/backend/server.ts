@@ -13,6 +13,7 @@ import { claudeRoutes } from './routes/claude.js'
 import { uploadRoutes } from './routes/upload.js'
 import { componentsRoutes } from './routes/components.js'
 import { configRoutes } from './routes/config.js'
+import { collectionsRoutes } from './routes/collections.js'
 import { authRoutes } from './routes/auth.js'
 import { authMiddleware } from './auth.js'
 
@@ -55,6 +56,7 @@ cms.route('/api/claude', claudeRoutes)
 cms.route('/api/upload', uploadRoutes)
 cms.route('/api/components', componentsRoutes)
 cms.route('/api/config', configRoutes)
+cms.route('/api/collections', collectionsRoutes)
 
 // Serve content files (images, media) from the content directory
 // URL /astrocms/content/foo.jpg -> {ROOT_DIR}/{contentDir}/foo.jpg

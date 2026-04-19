@@ -111,6 +111,7 @@ Deployment-only environment variables:
 | `ASTROCMS_PASSWORD` | Optional password protection | *(none)* |
 | `ASTROCMS_DEV_CMD` | Command to start the website dev server inside the container. When set, AstroCMS proxies the root path to the dev server. | *(none)* |
 | `ASTROCMS_DEV_PORT` | Port the dev server listens on (used for the proxy and for probing). | `4321` when `ASTROCMS_DEV_CMD` is set |
+| `ASTROCMS_INSTALL_CMD` | Override the project dependency install command in the container. By default the entrypoint auto-detects npm / pnpm / yarn / bun from the lockfile. | *(auto-detected)* |
 | `GIT_REPO_URL` | Git repo URL (Docker mode) | *(auto-detected)* |
 | `GIT_BRANCH` | Git branch | `main` |
 | `GIT_PAT` | GitHub Personal Access Token | *(none)* |
