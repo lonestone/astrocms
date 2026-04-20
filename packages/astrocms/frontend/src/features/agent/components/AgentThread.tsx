@@ -10,8 +10,10 @@ import { AssistantMessage } from './AssistantMessage.js'
 import { RecentConversations } from './RecentConversations.js'
 import { LoadedMessages } from './LoadedMessages.js'
 import { PermissionRequest } from './PermissionRequest.js'
+import { AskUserQuestionRequest } from './AskUserQuestionRequest.js'
 import { useAutoScroll } from '../hooks/useAutoScroll.js'
 import { usePendingPermission } from '../hooks/usePendingPermission.js'
+import { useInvalidateFilesOnIdle } from '../hooks/useInvalidateFilesOnIdle.js'
 import type { Conversation } from '../../../api.js'
 
 interface Props {
@@ -32,6 +34,7 @@ export function AgentThread({
   } = useAutoScroll<HTMLDivElement>()
   const isRunning = useAuiState((s) => s.thread.isRunning)
   const { permission, clear: clearPermission } = usePendingPermission(isRunning)
+  useInvalidateFilesOnIdle()
 
   useEffect(() => {
     scrollToBottom()
@@ -66,12 +69,18 @@ export function AgentThread({
             AssistantMessage,
           }}
         />
-        {permission && (
-          <PermissionRequest
-            permission={permission}
-            onResolved={clearPermission}
-          />
-        )}
+        {permission &&
+          (permission.toolName === 'AskUserQuestion' ? (
+            <AskUserQuestionRequest
+              permission={permission}
+              onResolved={clearPermission}
+            />
+          ) : (
+            <PermissionRequest
+              permission={permission}
+              onResolved={clearPermission}
+            />
+          ))}
         <div className="h-2" />
       </div>
       <AgentComposer />
@@ -87,10 +96,10 @@ function AgentComposer() {
   }, [aui])
 
   return (
-    <ComposerPrimitive.Root className="p-3 border-t border-border flex gap-2">
+    <ComposerPrimitive.Root className="p-3 border-t border-border flex gap-2 bg-white shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]">
       <ComposerPrimitive.Input
         placeholder={'Ask Claude...\nEnter to send, Shift+Enter for new line'}
-        className="flex-1 p-2 border border-border rounded-md resize-none outline-none text-sm font-[inherit] bg-white min-h-[60px] max-h-[120px]"
+        className="flex-1 p-2.5 border-2 border-border rounded-md resize-none outline-none text-sm font-[inherit] bg-white min-h-[72px] max-h-[160px] focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
         rows={3}
         autoFocus
       />

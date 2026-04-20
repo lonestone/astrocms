@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useResizablePanel } from '../../common/hooks/useResizablePanel.js'
 import { ResizeHandle } from '../../common/components/ResizeHandle.js'
@@ -11,8 +11,31 @@ import {
 } from '../../../api.js'
 import { RiAddLine } from 'react-icons/ri'
 
-export function AgentPanel() {
-  const [sessionId, setSessionId] = useState<string | null>(null)
+const SESSION_STORAGE_KEY = 'cms-agent-session-id'
+
+function readStoredSessionId(): string | null {
+  try {
+    return localStorage.getItem(SESSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredSessionId(value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(SESSION_STORAGE_KEY)
+    else localStorage.setItem(SESSION_STORAGE_KEY, value)
+  } catch {}
+}
+
+interface Props {
+  open: boolean
+}
+
+export function AgentPanel({ open }: Props) {
+  const [sessionId, setSessionId] = useState<string | null>(() =>
+    readStoredSessionId()
+  )
   const [loadedMessages, setLoadedMessages] = useState<any[] | null>(null)
 
   const {
@@ -40,23 +63,42 @@ export function AgentPanel() {
     side: 'left',
   })
 
-  function handleNewConversation() {
+  // Hydrate messages for a session that was restored from localStorage.
+  const isAuthenticated = status?.authenticated === true
+  useEffect(() => {
+    if (!sessionId || !isAuthenticated || loadedMessages !== null) return
+    let cancelled = false
+    fetchConversationMessages(sessionId).then((messages) => {
+      if (!cancelled) setLoadedMessages(messages)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, isAuthenticated, loadedMessages])
+
+  const handleNewConversation = useCallback(() => {
     setSessionId(null)
     setLoadedMessages(null)
-  }
+    writeStoredSessionId(null)
+  }, [])
 
-  async function handleSelectConversation(id: string) {
+  const handleSelectConversation = useCallback(async (id: string) => {
     setSessionId(id)
+    writeStoredSessionId(id)
     const messages = await fetchConversationMessages(id)
     setLoadedMessages(messages)
-  }
-
-  const isAuthenticated = status?.authenticated === true
+  }, [])
 
   return (
     <>
-      <ResizeHandle side="left" onMouseDown={handleMouseDown} />
-      <aside style={{ width }} className="bg-bg-panel flex flex-col shrink-0">
+      {open && <ResizeHandle side="left" onMouseDown={handleMouseDown} />}
+      <aside
+        style={{ width: open ? width : 0 }}
+        className={`bg-bg-panel flex flex-col shrink-0 overflow-hidden ${
+          open ? '' : 'hidden'
+        }`}
+        aria-hidden={!open}
+      >
         <div className="px-3 py-2.5 border-b border-border font-semibold text-xs flex items-center justify-between">
           <span>Agent</span>
           {isAuthenticated && (

@@ -21,6 +21,12 @@ import { useFiles } from '../../file/contexts/FilesContext.js'
 import { getLocaleSiblings } from '../../common/utils/folderTarget.js'
 import { getSchemaForFile } from '../../common/utils/collections.js'
 import { useCollections } from '../../sidebar/hooks/useCollections.js'
+import { useSorts } from '../../sidebar/hooks/useFolderSort.js'
+import { useNames } from '../../sidebar/hooks/useFolderName.js'
+import {
+  anyFieldChanged,
+  getTreeRelevantFields,
+} from '../utils/treeRelevantFields.js'
 import {
   getDataFormat,
   isDataFormat,
@@ -29,13 +35,15 @@ import {
   inferSchemaFromData,
 } from '../utils/dataFormats.js'
 
+const AUTO_SAVE_DELAY_MS = 3000
+
 interface Props {
   onSelectFile: (path: string) => void
 }
 
 export function Editor({ onSelectFile }: Props) {
   const filePath = useFilePath()!
-  const { tree } = useFiles()
+  const { tree, invalidateTree } = useFiles()
   const format = useMemo(() => getDataFormat(filePath), [filePath])
   const dataOnly = isDataFormat(format)
 
@@ -69,6 +77,12 @@ export function Editor({ onSelectFile }: Props) {
   const serverSchema = useMemo(
     () => getSchemaForFile(filePath, collections),
     [filePath, collections]
+  )
+  const savedSorts = useSorts()
+  const savedNames = useNames()
+  const treeRelevantFields = useMemo(
+    () => getTreeRelevantFields(filePath, collections, savedSorts, savedNames),
+    [filePath, collections, savedSorts, savedNames]
   )
 
   // For data files without an explicit schema, infer fields from data
@@ -112,18 +126,38 @@ export function Editor({ onSelectFile }: Props) {
     body !== originalBody ||
     JSON.stringify(frontmatter) !== JSON.stringify(originalFrontmatter)
 
+  const lastSaveAt = useRef(0)
+
   const handleSave = useCallback(async () => {
+    const frontmatterAtSave = frontmatterRef.current
+    const bodyAtSave = bodyRef.current
+    const priorFrontmatter = originalFrontmatter
     let content: string
     if (dataOnly) {
-      content = serializeDataContent(frontmatterRef.current, format)
+      content = serializeDataContent(frontmatterAtSave, format)
     } else {
-      const fullBody = combineEsmAndContent(esmRef.current, bodyRef.current)
-      content = combineFrontmatterAndBody(frontmatterRef.current, fullBody)
+      const fullBody = combineEsmAndContent(esmRef.current, bodyAtSave)
+      content = combineFrontmatterAndBody(frontmatterAtSave, fullBody)
     }
     await saveFile.mutateAsync({ path: filePath, content })
-    setOriginalBody(bodyRef.current)
-    setOriginalFrontmatter(frontmatterRef.current)
-  }, [filePath, saveFile, dataOnly, format])
+    lastSaveAt.current = Date.now()
+    setOriginalBody(bodyAtSave)
+    setOriginalFrontmatter(frontmatterAtSave)
+    if (
+      treeRelevantFields.length > 0 &&
+      anyFieldChanged(treeRelevantFields, priorFrontmatter, frontmatterAtSave)
+    ) {
+      invalidateTree()
+    }
+  }, [
+    filePath,
+    saveFile,
+    dataOnly,
+    format,
+    originalFrontmatter,
+    treeRelevantFields,
+    invalidateTree,
+  ])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -139,6 +173,21 @@ export function Editor({ onSelectFile }: Props) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [originalFrontmatter, originalBody, handleSave])
+
+  // Leading-edge auto-save: first edit saves immediately; subsequent edits
+  // within AUTO_SAVE_DELAY_MS of the previous save are coalesced and flushed
+  // once the window expires.
+  useEffect(() => {
+    if (!ready || !isDirty || saveFile.isPending) return
+    const remaining = Math.max(
+      0,
+      AUTO_SAVE_DELAY_MS - (Date.now() - lastSaveAt.current)
+    )
+    const timer = setTimeout(() => {
+      handleSave()
+    }, remaining)
+    return () => clearTimeout(timer)
+  }, [ready, isDirty, saveFile.isPending, body, frontmatter, handleSave])
 
   const handleBodyChange = useCallback((markdown: string) => {
     setBody(markdown)
@@ -175,7 +224,6 @@ export function Editor({ onSelectFile }: Props) {
         isDirty={isDirty}
         isSaving={saveFile.isPending}
         localeSiblings={localeSiblings}
-        onSave={handleSave}
         onSelectFile={onSelectFile}
       />
       {schemaError && (

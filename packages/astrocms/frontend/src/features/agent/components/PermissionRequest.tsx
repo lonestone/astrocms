@@ -31,7 +31,7 @@ export function PermissionRequest({ permission, onResolved }: Props) {
 
   async function handleRespond(behavior: 'allow' | 'deny') {
     setResponding(true)
-    await respondToPermission(permission.id, behavior)
+    await respondToPermission(permission.id, behavior, {})
     onResolved()
   }
 

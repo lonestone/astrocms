@@ -14,7 +14,8 @@ import { ROOT_DIR } from '../root.js'
 
 export const claudeRoutes = new Hono()
 
-// Tools that are auto-allowed (no permission prompt)
+// Tools that are auto-allowed (no permission prompt).
+// Bash commands use the Claude Code rule syntax: "Bash(ls:*)" allows any `ls ...`.
 const allowedTools = [
   'Read',
   'Edit',
@@ -24,6 +25,8 @@ const allowedTools = [
   'Agent',
   'TodoWrite',
   'NotebookEdit',
+  'Bash(ls:*)',
+  'Bash(find:*)',
 ]
 
 // --- Permission request handling ---
@@ -262,7 +265,7 @@ claudeRoutes.get('/permissions/events', (c) => {
 // Respond to a permission request
 claudeRoutes.post('/permissions/:id/respond', async (c) => {
   const id = c.req.param('id')
-  const { behavior, message } = await c.req.json()
+  const { behavior, message, updatedInput } = await c.req.json()
 
   if (!pendingPermission || pendingPermission.id !== id) {
     return c.json({ error: 'No matching pending permission' }, 404)
@@ -272,7 +275,13 @@ claudeRoutes.post('/permissions/:id/respond', async (c) => {
   pendingPermission = null
 
   if (behavior === 'allow') {
-    perm.resolve({ behavior: 'allow', updatedInput: perm.input })
+    perm.resolve({
+      behavior: 'allow',
+      updatedInput:
+        updatedInput && typeof updatedInput === 'object'
+          ? updatedInput
+          : perm.input,
+    })
   } else {
     perm.resolve({
       behavior: 'deny',

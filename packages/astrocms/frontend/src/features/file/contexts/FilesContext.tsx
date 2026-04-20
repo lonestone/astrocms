@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   MdDriveFileRenameOutline,
   MdContentCopy,
@@ -61,6 +62,8 @@ export interface CreateFolderOpts {
 interface FilesContextValue {
   tree: TreeNode[]
   invalidateTree: () => void
+  /** Invalidate every file-related query (tree + open file contents + git). */
+  invalidateFiles: () => void
   openMenu: (
     node: TreeNode,
     x: number,
@@ -131,8 +134,16 @@ function containingFolder(node: TreeNode): string {
 export function FilesProvider({ children }: { children: React.ReactNode }) {
   const { tree, invalidateTree } = useTree()
   const fileOps = useFileOps()
+  const queryClient = useQueryClient()
   const [menu, setMenu] = useState<MenuState>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
+
+  const invalidateFiles = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tree'] })
+    queryClient.invalidateQueries({ queryKey: ['file'] })
+    queryClient.invalidateQueries({ queryKey: ['folderMeta'] })
+    queryClient.invalidateQueries({ queryKey: ['gitStatus'] })
+  }, [queryClient])
 
   const openMenu = useCallback(
     (node: TreeNode, x: number, y: number, opts?: OpenMenuOpts) => {
@@ -328,6 +339,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
     () => ({
       tree,
       invalidateTree,
+      invalidateFiles,
       openMenu,
       rename,
       duplicate,
@@ -339,6 +351,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
     [
       tree,
       invalidateTree,
+      invalidateFiles,
       openMenu,
       rename,
       duplicate,

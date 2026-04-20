@@ -246,12 +246,15 @@ export interface PendingPermission {
 export async function respondToPermission(
   id: string,
   behavior: 'allow' | 'deny',
-  message?: string
+  options: {
+    message?: string
+    updatedInput?: Record<string, unknown>
+  } = {}
 ): Promise<{ ok: boolean }> {
   const res = await authFetch(`/claude/permissions/${id}/respond`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ behavior, message }),
+    body: JSON.stringify({ behavior, ...options }),
   })
   return res.json()
 }

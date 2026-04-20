@@ -37,7 +37,7 @@ export function Layout() {
             />
           </main>
           {gitOpen && <GitPanel />}
-          {agentOpen && <AgentPanel />}
+          <AgentPanel open={agentOpen} />
         </div>
       </FilePathProvider>
     </CurrentLangProvider>

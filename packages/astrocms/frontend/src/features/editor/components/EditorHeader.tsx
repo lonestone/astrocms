@@ -1,7 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router'
 import { MdMoreHoriz, MdAdd } from 'react-icons/md'
-import Button from '../../common/components/Button.js'
 import LangButton from '../../common/components/LangButton.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { stripExtension } from '../../common/utils/supportedFiles.js'
@@ -24,7 +23,6 @@ interface Props {
   isDirty: boolean
   isSaving: boolean
   localeSiblings?: LocaleSibling[] | null
-  onSave: () => void
   onSelectFile?: (path: string) => void
 }
 
@@ -44,7 +42,6 @@ export default function EditorHeader({
   isDirty,
   isSaving,
   localeSiblings,
-  onSave,
   onSelectFile,
 }: Props) {
   const filePath = useFilePath()!
@@ -194,14 +191,16 @@ export default function EditorHeader({
           </div>
         )}
       </div>
-      <div className="shrink-0 pl-2 flex items-center">
-        <Button
-          variant="primary"
-          onClick={onSave}
-          disabled={!isDirty || isSaving}
-        >
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
+      <div className="shrink-0 pl-2 pr-3 flex items-center">
+        {(isDirty || isSaving) && (
+          <span
+            className={`block w-1.5 h-1.5 rounded-full bg-blue-500 ${
+              isSaving ? 'animate-pulse' : ''
+            }`}
+            aria-label={isSaving ? 'Saving' : 'Unsaved changes'}
+            title={isSaving ? 'Saving...' : 'Unsaved changes'}
+          />
+        )}
       </div>
     </div>
   )

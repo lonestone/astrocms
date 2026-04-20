@@ -15,9 +15,12 @@ export function useSaveFile() {
   return useMutation({
     mutationFn: ({ path, content }: { path: string; content: string }) =>
       saveFile(path, content),
-    onSuccess: (_data, { path }) => {
-      queryClient.invalidateQueries({ queryKey: ['file', path] })
-      queryClient.invalidateQueries({ queryKey: ['tree'] })
+    onSuccess: (_data, { path, content }) => {
+      // Keep the file cache in sync with what we just wrote so that navigating
+      // away and back doesn't resurrect pre-save content. `tree` invalidation
+      // stays the caller's responsibility (the editor decides based on whether
+      // sort/display-name fields changed).
+      queryClient.setQueryData(['file', path], { path, content })
       queryClient.invalidateQueries({ queryKey: ['gitStatus'] })
     },
   })
