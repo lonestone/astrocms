@@ -1,19 +1,18 @@
+function normalize(s: string): string {
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+}
+
 /**
- * Subsequence fuzzy match (case-insensitive).
- * Returns the indices in `text` where `query` characters matched, in order.
- * Returns `null` if the query isn't a subsequence of the text.
+ * Case- and accent-insensitive subsequence match: returns true when every
+ * character of `query` appears in `text` in order.
  */
-export function fuzzyMatch(text: string, query: string): number[] | null {
-  if (!query) return null
-  const t = text.toLowerCase()
-  const q = query.toLowerCase()
-  const indices: number[] = []
+export function fuzzyMatch(text: string, query: string): boolean {
+  if (!query) return false
+  const t = normalize(text)
+  const q = normalize(query)
   let qi = 0
   for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) {
-      indices.push(ti)
-      qi++
-    }
+    if (t[ti] === q[qi]) qi++
   }
-  return qi === q.length ? indices : null
+  return qi === q.length
 }

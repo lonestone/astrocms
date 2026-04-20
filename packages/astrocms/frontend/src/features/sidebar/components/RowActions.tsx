@@ -27,7 +27,7 @@ export function RowActions({
   const mutedColor = isSelected ? 'text-white' : 'text-text-muted'
 
   return (
-    <span className="flex items-center gap-0.5 shrink-0">
+    <span className="absolute right-1 top-0 bottom-0 flex items-center gap-0.5">
       {isRealFolder && (
         <>
           <button

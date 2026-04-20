@@ -18,6 +18,7 @@ import { useOpenFolders } from '../hooks/useOpenFolders.js'
 import { filterTree } from '../utils/filterTree.js'
 import { ActionsMenu, type ActionItem } from './ActionsMenu.js'
 import { ConfirmDialog } from './ConfirmDialog.js'
+import { MoveDialog } from './MoveDialog.js'
 import { PromptDialog } from './PromptDialog.js'
 import { SidebarSearch } from './SidebarSearch.js'
 import { SortMenuWrapper } from './SortMenuWrapper.js'
@@ -175,21 +176,21 @@ export function Sidebar({ tree, onSelectFile }: Props) {
     navigate(`/edit/${indexPath}`)
   }
 
-  async function handleMove(node: TreeNode, toPath: string) {
-    const trimmed = toPath.trim().replace(/^\/+|\/+$/g, '')
-    if (!trimmed || trimmed === node.path) {
+  async function handleMove(node: TreeNode, destFolder: string) {
+    const to = destFolder ? `${destFolder}/${node.name}` : node.name
+    if (to === node.path) {
       setDialog(null)
       return
     }
-    await fileOps.rename.mutateAsync({ from: node.path, to: trimmed })
+    await fileOps.rename.mutateAsync({ from: node.path, to })
     setDialog(null)
     if (node.type === 'file' && selectedFile === node.path) {
-      navigate(`/edit/${trimmed}`)
+      navigate(`/edit/${to}`)
     } else if (
       node.type === 'directory' &&
       selectedFile?.startsWith(node.path + '/')
     ) {
-      navigate(`/edit/${trimmed}${selectedFile.slice(node.path.length)}`)
+      navigate(`/edit/${to}${selectedFile.slice(node.path.length)}`)
     }
   }
 
@@ -278,7 +279,6 @@ export function Sidebar({ tree, onSelectFile }: Props) {
               onSubmitRename={handleRename}
               onCancelRename={() => setRenamingPath(null)}
               isCollectionFolder={isCollectionFolder}
-              matchIndices={filtered.matchIndices}
               searching={searching}
             />
           ))}
@@ -344,14 +344,11 @@ export function Sidebar({ tree, onSelectFile }: Props) {
         />
       )}
       {dialog?.kind === 'move' && (
-        <PromptDialog
-          title={`Move ${dialog.node.name}`}
-          label="Destination path"
-          initialValue={dialog.node.path}
-          confirmLabel="Move"
-          description="Relative to the content directory. Missing folders will be created."
+        <MoveDialog
+          node={dialog.node}
+          tree={tree}
           onCancel={() => setDialog(null)}
-          onConfirm={(path) => handleMove(dialog.node, path)}
+          onConfirm={(destFolder) => handleMove(dialog.node, destFolder)}
         />
       )}
       {dialog?.kind === 'delete' && (

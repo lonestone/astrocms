@@ -1,6 +1,11 @@
 import type { TreeNode } from '../../../api.js'
 import { isSupportedFile, stripExtension } from './supportedFiles.js'
 
+function hasEditableContent(node: TreeNode): boolean {
+  if (node.type === 'file') return isSupportedFile(node.name)
+  return node.children?.some(hasEditableContent) === true
+}
+
 /**
  * Check if a directory node should act as a direct file link.
  * Returns the target file path, or null if the folder should behave normally.
@@ -23,6 +28,13 @@ export function getFolderTarget(
   )
 
   if (files.length === 0) return null
+
+  // A subdirectory with editable content means the user needs to expand this
+  // folder to reach it, so don't short-circuit to a single file.
+  const hasContentSubdir = node.children.some(
+    (c) => c.type === 'directory' && hasEditableContent(c)
+  )
+  if (hasContentSubdir) return null
 
   // Case 1: Only a single index file
   if (files.length === 1 && stripExtension(files[0].name) === 'index') {

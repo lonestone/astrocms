@@ -30,6 +30,7 @@ export default function EditorHeader({
   const pathToShow = localeSiblings
     ? filePath.split('/').slice(0, -1).join('/')
     : filePath.slice(0, filePath.length - fileName.length) + currentLang
+  const missingPart = filePath.slice(pathToShow.length)
 
   return (
     <div className="flex items-center justify-between">
@@ -42,6 +43,22 @@ export default function EditorHeader({
             {part}
           </span>
         ))}
+        {missingPart &&
+          (missingPart.startsWith('/') ? (
+            missingPart
+              .slice(1)
+              .split('/')
+              .map((part, i) => (
+                <span key={`m${i}`} className="text-text-muted/40 font-normal">
+                  <span className="mx-2">/</span>
+                  {part}
+                </span>
+              ))
+          ) : (
+            <span className="text-text-muted/40 font-normal">
+              {missingPart}
+            </span>
+          ))}
       </div>
       {localeSiblings && localeSiblings.length > 1 && (
         <div className="ml-4 flex h-full items-stretch gap-1">

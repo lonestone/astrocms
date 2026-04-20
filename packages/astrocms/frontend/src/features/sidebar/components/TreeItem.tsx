@@ -24,7 +24,6 @@ import {
   getDefaultSort,
 } from '../utils/collectionDefaults.js'
 import { hasSupportedFiles } from '../utils/treeHelpers.js'
-import { highlightMatch } from '../utils/highlightMatch.js'
 import {
   formatSortValue,
   getNodeFieldValue,
@@ -51,7 +50,6 @@ export interface TreeItemProps {
   inheritedSort?: FolderSort
   inheritedNameField?: string
   isCollectionFolder: (path: string) => boolean
-  matchIndices?: Map<string, number[]>
   searching?: boolean
 }
 
@@ -74,7 +72,6 @@ export function TreeItem(props: TreeItemProps) {
     inheritedSort,
     inheritedNameField,
     isCollectionFolder,
-    matchIndices,
     searching,
   } = props
 
@@ -199,7 +196,7 @@ export function TreeItem(props: TreeItemProps) {
           }
         }}
         style={{ paddingLeft: `${8 + depth * 14}px` }}
-        className={`group py-1 pr-1 flex items-center gap-1 select-none ${
+        className={`group relative py-1 pr-1 flex items-center gap-1 select-none ${
           isSelected ? 'bg-primary text-white' : 'text-text hover:bg-bg-main'
         } ${
           isFile && isSupported
@@ -238,7 +235,7 @@ export function TreeItem(props: TreeItemProps) {
         ) : (
           <>
             <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">
-              {highlightMatch(rowLabel, matchIndices?.get(node.path))}
+              {rowLabel}
             </span>
             {rightLabel && (
               <span
@@ -298,7 +295,6 @@ export function TreeItem(props: TreeItemProps) {
               inheritedSort={childInheritedSort}
               inheritedNameField={childInheritedNameField}
               isCollectionFolder={isCollectionFolder}
-              matchIndices={matchIndices}
               searching={searching}
             />
           ))}
