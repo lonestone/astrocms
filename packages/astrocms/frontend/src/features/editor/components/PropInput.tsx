@@ -64,6 +64,18 @@ export function formatLabel(name: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
+/** Normalize a date-ish string to YYYY-MM-DD for `<input type="date">` */
+function toDateInputValue(value: string): string {
+  if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10)
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return ''
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // ---------------------------------------------------------------------------
 // Image prop input with preview and media picker
 // ---------------------------------------------------------------------------
@@ -253,7 +265,7 @@ export function PropInput({
         <span className={labelTextClassName}>{formatLabel(name)}</span>
         <input
           type="date"
-          value={value}
+          value={toDateInputValue(value)}
           onChange={(e) => onChange(e.target.value)}
           className={`${inputClassName} max-w-40`}
         />
