@@ -74,9 +74,12 @@ export function Sidebar({ tree, onSelectFile }: Props) {
   function getSchemaForFolder(
     folderPath: string
   ): FrontmatterFieldSchema[] | undefined {
-    const collection = folderPath.split('/')[0]
-    const info = collections[collection]
-    return info?.schema ?? undefined
+    for (const [name, info] of Object.entries(collections)) {
+      if (info.loader === 'file') continue
+      const folder = info.base ?? name
+      if (folder === folderPath) return info.schema ?? undefined
+    }
+    return undefined
   }
 
   const collectionFolderPaths = useMemo(
@@ -248,7 +251,7 @@ export function Sidebar({ tree, onSelectFile }: Props) {
     <>
       <aside
         style={{ width }}
-        className="bg-bg-panel overflow-auto shrink-0 text-xs"
+        className="bg-bg-panel overflow-auto shrink-0 text-sm"
       >
         <SidebarSearch query={query} onChange={setQuery} />
         <div className="pb-3 pt-1">

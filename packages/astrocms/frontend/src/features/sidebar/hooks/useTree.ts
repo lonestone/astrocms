@@ -1,9 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 import { fetchTree, type CollectionInfo } from '../../../api.js'
-import { getCollectionFolderPaths } from '../../common/utils/collections.js'
 import { useCollections } from './useCollections.js'
-import { useSorts, DEFAULT_SORT } from './useFolderSort.js'
+import { useNames } from './useFolderName.js'
+import { useSorts } from './useFolderSort.js'
+import {
+  FILENAME_FIELD,
+  getDefaultNameField,
+  getDefaultSort,
+} from '../utils/collectionDefaults.js'
 
 function collectionGlobs(info: CollectionInfo): string[] {
   if (info.loader === 'file') return []
@@ -12,35 +17,32 @@ function collectionGlobs(info: CollectionInfo): string[] {
   return patterns.map((p) => (info.base ? `${info.base}/${p}` : p))
 }
 
-/** Globs of the collection rooted exactly at `folderPath`, if any. */
-function globsForCollectionFolder(
-  folderPath: string,
-  collections: Record<string, CollectionInfo>
-): string[] {
-  for (const [name, info] of Object.entries(collections)) {
-    if (info.loader === 'file') continue
-    const folder = info.base ?? name
-    if (folder === folderPath) return collectionGlobs(info)
-  }
-  return []
-}
-
 export function useTree() {
   const queryClient = useQueryClient()
-  const sorts = useSorts()
+  const savedSorts = useSorts()
+  const savedNames = useNames()
   const { data: collectionsData } = useCollections()
   const collections = collectionsData?.collections ?? {}
 
-  // Only collection folders may define a sort; others are ignored.
+  // For every collection, gather the effective sort field + name field
+  // (saved override or schema-derived smart default) and ask the server to
+  // attach them under `data` on matching files.
   const includeParams = useMemo(() => {
-    const collectionFolders = getCollectionFolderPaths(collections)
     const byPattern = new Map<string, Set<string>>()
-    for (const [folder, s] of Object.entries(sorts)) {
-      if (s.field === DEFAULT_SORT.field) continue
-      if (!collectionFolders.has(folder)) continue
-      for (const g of globsForCollectionFolder(folder, collections)) {
+    for (const [name, info] of Object.entries(collections)) {
+      if (info.loader === 'file') continue
+      const folder = info.base ?? name
+      const schema = info.schema ?? undefined
+      const sort = savedSorts[folder] ?? getDefaultSort(schema)
+      const nameField = savedNames[folder] ?? getDefaultNameField(schema)
+      const fields: string[] = []
+      if (sort.field !== FILENAME_FIELD) fields.push(sort.field)
+      if (nameField !== FILENAME_FIELD) fields.push(nameField)
+      if (fields.length === 0) continue
+      for (const g of collectionGlobs(info)) {
         if (!byPattern.has(g)) byPattern.set(g, new Set())
-        byPattern.get(g)!.add(s.field)
+        const set = byPattern.get(g)!
+        for (const f of fields) set.add(f)
       }
     }
     return [...byPattern.entries()]
@@ -49,7 +51,7 @@ export function useTree() {
         fields: [...fields].sort(),
       }))
       .sort((a, b) => a.pattern.localeCompare(b.pattern))
-  }, [sorts, collections])
+  }, [savedSorts, savedNames, collections])
 
   const queryKey = useMemo(
     () => [

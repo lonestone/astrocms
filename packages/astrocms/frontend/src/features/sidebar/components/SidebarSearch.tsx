@@ -24,7 +24,7 @@ export function SidebarSearch({ query, onChange }: Props) {
           }}
           placeholder="Search…"
           aria-label="Search files"
-          className="flex-1 min-w-0 m-0 p-0 border-0 bg-transparent text-xs outline-none"
+          className="flex-1 min-w-0 m-0 p-0 border-0 bg-transparent text-sm outline-none"
         />
         <button
           type="button"

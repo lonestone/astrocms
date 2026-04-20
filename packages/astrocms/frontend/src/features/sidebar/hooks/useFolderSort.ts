@@ -9,10 +9,6 @@ export const DEFAULT_SORT: FolderSort = { field: '__filename', order: 'asc' }
 
 const STORAGE_PREFIX = 'cms-sort:'
 
-function isDefaultSort(s: FolderSort): boolean {
-  return s.field === DEFAULT_SORT.field && s.order === DEFAULT_SORT.order
-}
-
 // ---------------------------------------------------------------------------
 // Subscribable store, backed by localStorage
 // ---------------------------------------------------------------------------
@@ -61,9 +57,9 @@ function getSnapshot(): Sorts {
   return state
 }
 
-function writeOne(path: string, sort: FolderSort) {
+function writeOne(path: string, sort: FolderSort | null) {
   const next = { ...state }
-  if (isDefaultSort(sort)) {
+  if (sort === null) {
     delete next[path]
     try {
       localStorage.removeItem(STORAGE_PREFIX + path)
@@ -82,19 +78,29 @@ function writeOne(path: string, sort: FolderSort) {
 // Hooks
 // ---------------------------------------------------------------------------
 
-/** Returns the current {folderPath → sort} map (non-default entries only). */
+/** Returns the current {folderPath → saved sort} map. */
 export function useSorts(): Sorts {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
-export function useFolderSort(folderPath: string) {
+/**
+ * Per-folder sort with a schema-aware fallback. When the user hasn't picked
+ * anything, `sort` reflects `smartDefault` (or filename asc). `clearSort()`
+ * removes any saved pick so the fallback resumes.
+ */
+export function useFolderSort(
+  folderPath: string,
+  smartDefault?: FolderSort
+) {
   const sorts = useSorts()
-  const sort = sorts[folderPath] ?? DEFAULT_SORT
+  const saved = sorts[folderPath] ?? null
+  const sort = saved ?? smartDefault ?? DEFAULT_SORT
 
   const setSort = useCallback(
     (next: FolderSort) => writeOne(folderPath, next),
     [folderPath]
   )
+  const clearSort = useCallback(() => writeOne(folderPath, null), [folderPath])
 
-  return { sort, setSort, isDefault: isDefaultSort(sort) }
+  return { sort, setSort, clearSort, isDefault: saved === null }
 }

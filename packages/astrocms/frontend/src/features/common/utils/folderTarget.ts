@@ -8,8 +8,14 @@ import { isSupportedFile, stripExtension } from './supportedFiles.js'
  * Cases:
  * - Folder contains only a single index file (index.mdx / index.md)
  * - Folder contains only files with 2-letter base names (locale files like en.mdx, fr.md)
+ *
+ * For locale folders, `preferredLang` picks the matching file; otherwise the
+ * first locale alphabetically wins.
  */
-export function getFolderTarget(node: TreeNode): string | null {
+export function getFolderTarget(
+  node: TreeNode,
+  preferredLang?: string | null
+): string | null {
   if (node.type !== 'directory' || !node.children) return null
 
   const files = node.children.filter(
@@ -26,7 +32,10 @@ export function getFolderTarget(node: TreeNode): string | null {
   // Case 2: All files have 2-letter base names (locale files)
   const allLocale = files.every((f) => stripExtension(f.name).length === 2)
   if (allLocale) {
-    // Sort alphabetically so "en" comes before "fr"
+    if (preferredLang) {
+      const match = files.find((f) => stripExtension(f.name) === preferredLang)
+      if (match) return match.path
+    }
     const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name))
     return sorted[0].path
   }
