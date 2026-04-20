@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react'
 import type { PropSchema } from '../../../api.js'
-import { useMediaModal } from './MediaModal.js'
+import { useMediaModal } from '../../file/components/MediaModal.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import Button from '../../common/components/Button.js'

@@ -13,13 +13,18 @@ import { getCollectionFolderPaths } from '../../common/utils/collections.js'
 import { useResizablePanel } from '../../common/hooks/useResizablePanel.js'
 import { ResizeHandle } from '../../common/components/ResizeHandle.js'
 import { useCollections } from '../hooks/useCollections.js'
-import { useFileOps } from '../hooks/useFileOps.js'
+import { useFileOps } from '../../file/hooks/useFileOps.js'
 import { useOpenFolders } from '../hooks/useOpenFolders.js'
 import { filterTree } from '../utils/filterTree.js'
-import { ActionsMenu, type ActionItem } from './ActionsMenu.js'
-import { ConfirmDialog } from './ConfirmDialog.js'
-import { MoveDialog } from './MoveDialog.js'
-import { PromptDialog } from './PromptDialog.js'
+import { ActionsMenu, type ActionItem } from '../../file/components/ActionsMenu.js'
+import { ConfirmDialog } from '../../file/components/ConfirmDialog.js'
+import { MoveDialog } from '../../file/components/MoveDialog.js'
+import { PromptDialog } from '../../file/components/PromptDialog.js'
+import {
+  extOf,
+  isLocaleFilename,
+  usedLangsInFolder,
+} from '../../file/utils/localeFiles.js'
 import { SidebarSearch } from './SidebarSearch.js'
 import { SortMenuWrapper } from './SortMenuWrapper.js'
 import { TreeItem } from './TreeItem.js'
@@ -341,6 +346,22 @@ export function Sidebar({ tree, onSelectFile }: Props) {
           confirmLabel="Duplicate"
           onCancel={() => setDialog(null)}
           onConfirm={(name) => handleDuplicate(dialog.node, name)}
+          langHint={
+            dialog.node.type === 'file' && isLocaleFilename(dialog.node.name)
+              ? {
+                  ext: extOf(dialog.node.name),
+                  usedLangs: usedLangsInFolder(
+                    tree,
+                    dialog.node.path.includes('/')
+                      ? dialog.node.path.slice(
+                          0,
+                          dialog.node.path.lastIndexOf('/')
+                        )
+                      : ''
+                  ),
+                }
+              : undefined
+          }
         />
       )}
       {dialog?.kind === 'move' && (

@@ -7,7 +7,18 @@ import React, {
   useMemo,
   useRef,
 } from 'react'
+import {
+  MdMoreHoriz,
+  MdDriveFileRenameOutline,
+  MdDriveFileMoveOutline,
+  MdDeleteOutline,
+} from 'react-icons/md'
 import { useTree } from '../../sidebar/hooks/useTree.js'
+import { useFileOps } from '../hooks/useFileOps.js'
+import { ActionsMenu, type ActionItem } from './ActionsMenu.js'
+import { PromptDialog } from './PromptDialog.js'
+import { MoveDialog } from './MoveDialog.js'
+import { ConfirmDialog } from './ConfirmDialog.js'
 import { uploadMedia, type TreeNode } from '../../../api.js'
 import Button from '../../common/components/Button.js'
 import { FiUpload } from 'react-icons/fi'
@@ -146,6 +157,19 @@ function MediaModalOverlay({
   const [currentDir, setCurrentDir] = useState(initialDir)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { tree, invalidateTree } = useTree()
+  const fileOps = useFileOps()
+
+  const [menu, setMenu] = useState<{
+    entry: TreeNode
+    x: number
+    y: number
+  } | null>(null)
+  const [dialog, setDialog] = useState<
+    | { kind: 'rename'; entry: TreeNode }
+    | { kind: 'move'; entry: TreeNode }
+    | { kind: 'delete'; entry: TreeNode }
+    | null
+  >(null)
 
   // Get children for the current directory.
   // An empty currentDir means root (the tree itself).
@@ -159,14 +183,15 @@ function MediaModalOverlay({
     (e) => e.type === 'file' && IMAGE_EXTS.test(e.name)
   )
 
-  // Close on Escape
+  // Close on Escape, unless a sub-menu or dialog is open (it handles its own).
   useEffect(() => {
+    if (menu || dialog) return
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [onClose, menu, dialog])
 
   const handleNavigate = useCallback((path: string) => {
     setCurrentDir(path)
@@ -196,6 +221,57 @@ function MediaModalOverlay({
     },
     [filePath, onSelect]
   )
+
+  const buildMenuItems = useCallback(
+    (entry: TreeNode): ActionItem[] => [
+      {
+        label: 'Rename',
+        icon: <MdDriveFileRenameOutline className="w-3.5 h-3.5" />,
+        onClick: () => setDialog({ kind: 'rename', entry }),
+      },
+      {
+        label: 'Move',
+        icon: <MdDriveFileMoveOutline className="w-3.5 h-3.5" />,
+        onClick: () => setDialog({ kind: 'move', entry }),
+      },
+      {
+        label: 'Delete',
+        danger: true,
+        icon: <MdDeleteOutline className="w-3.5 h-3.5" />,
+        onClick: () => setDialog({ kind: 'delete', entry }),
+      },
+    ],
+    []
+  )
+
+  async function handleRename(entry: TreeNode, newName: string) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === entry.name) {
+      setDialog(null)
+      return
+    }
+    const parent = entry.path.includes('/')
+      ? entry.path.slice(0, entry.path.lastIndexOf('/'))
+      : ''
+    const to = parent ? `${parent}/${trimmed}` : trimmed
+    await fileOps.rename.mutateAsync({ from: entry.path, to })
+    setDialog(null)
+  }
+
+  async function handleMove(entry: TreeNode, destFolder: string) {
+    const to = destFolder ? `${destFolder}/${entry.name}` : entry.name
+    if (to === entry.path) {
+      setDialog(null)
+      return
+    }
+    await fileOps.rename.mutateAsync({ from: entry.path, to })
+    setDialog(null)
+  }
+
+  async function handleDelete(entry: TreeNode) {
+    await fileOps.remove.mutateAsync({ path: entry.path })
+    setDialog(null)
+  }
 
   const canGoUp = currentDir !== ''
 
@@ -291,14 +367,33 @@ function MediaModalOverlay({
                   tabIndex={0}
                   aria-label={`Select ${entry.name}`}
                   onClick={() => handleSelectEntry(entry)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ entry, x: e.clientX, y: e.clientY })
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       handleSelectEntry(entry)
                     }
                   }}
-                  className="border border-border rounded p-1 cursor-pointer flex flex-col items-center gap-1 hover:border-primary"
+                  className="group relative border border-border rounded p-1 cursor-pointer flex flex-col items-center gap-1 hover:border-primary"
                 >
+                  <button
+                    type="button"
+                    aria-label="Actions"
+                    title="Actions"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const rect = (
+                        e.currentTarget as HTMLElement
+                      ).getBoundingClientRect()
+                      setMenu({ entry, x: rect.right, y: rect.bottom })
+                    }}
+                    className="absolute top-1 right-1 w-5 h-5 rounded bg-white/80 text-text-muted hover:bg-white opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center justify-center shadow-sm"
+                  >
+                    <MdMoreHoriz className="w-4 h-4" />
+                  </button>
                   <img
                     src={previewUrl(entry)}
                     alt={entry.name}
@@ -320,6 +415,44 @@ function MediaModalOverlay({
           ) : null}
         </div>
       </div>
+
+      {menu && (
+        <ActionsMenu
+          items={buildMenuItems(menu.entry)}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
+      {dialog?.kind === 'rename' && (
+        <PromptDialog
+          title={`Rename ${dialog.entry.name}`}
+          label="New name"
+          initialValue={dialog.entry.name}
+          confirmLabel="Rename"
+          onCancel={() => setDialog(null)}
+          onConfirm={(name) => handleRename(dialog.entry, name)}
+        />
+      )}
+      {dialog?.kind === 'move' && (
+        <MoveDialog
+          node={dialog.entry}
+          tree={tree}
+          onCancel={() => setDialog(null)}
+          onConfirm={(destFolder) => handleMove(dialog.entry, destFolder)}
+        />
+      )}
+      {dialog?.kind === 'delete' && (
+        <ConfirmDialog
+          title={`Delete ${dialog.entry.name}?`}
+          message={`This will permanently delete "${dialog.entry.path}".`}
+          confirmLabel="Delete"
+          confirmVariant="danger"
+          onCancel={() => setDialog(null)}
+          onConfirm={() => handleDelete(dialog.entry)}
+        />
+      )}
     </div>
   )
 }

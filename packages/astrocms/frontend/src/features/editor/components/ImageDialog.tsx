@@ -6,7 +6,7 @@ import {
   saveImage$,
 } from '@mdxeditor/editor'
 import { useCellValue, usePublisher } from '@mdxeditor/gurx'
-import { useMediaModal } from './MediaModal.js'
+import { useMediaModal } from '../../file/components/MediaModal.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
 import Button from '../../common/components/Button.js'

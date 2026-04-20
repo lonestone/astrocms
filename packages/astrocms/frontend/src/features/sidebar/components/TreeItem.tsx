@@ -29,7 +29,7 @@ import {
   getNodeFieldValue,
   sortTreeChildren,
 } from '../utils/treeSort.js'
-import { InlineRenameInput } from './InlineRenameInput.js'
+import { InlineRenameInput } from '../../file/components/InlineRenameInput.js'
 import { RowActions } from './RowActions.js'
 
 export interface TreeItemProps {

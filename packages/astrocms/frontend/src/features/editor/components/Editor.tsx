@@ -172,6 +172,7 @@ export function Editor({ tree, onSelectFile }: Props) {
   return (
     <div className="flex flex-col h-full">
       <EditorHeader
+        tree={tree}
         isDirty={isDirty}
         isSaving={saveFile.isPending}
         localeSiblings={localeSiblings}
@@ -184,7 +185,7 @@ export function Editor({ tree, onSelectFile }: Props) {
           {schemaError}
         </div>
       )}
-      <div className="flex-1 flex flex-col border border-border rounded-md overflow-auto bg-bg">
+      <div className="flex-1 flex flex-col border border-border rounded-md overflow-auto bg-bg -mt-px">
         {error ? (
           <div className="p-5 text-red-500">File not found: {filePath}</div>
         ) : loading ? (
