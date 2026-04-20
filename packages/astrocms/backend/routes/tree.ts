@@ -1,58 +1,45 @@
 import { Hono } from 'hono'
 import { readdir } from 'fs/promises'
-import { join, relative, basename, extname } from 'path'
+import { join, relative } from 'path'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
 import { getFrontmatter, getByPath } from '../parsers/frontmatter.js'
-
-const SUPPORTED_EXTS = ['.mdx', '.md', '.yaml', '.yml', '.toml', '.json']
-
-function isSupported(name: string): boolean {
-  return SUPPORTED_EXTS.some((ext) => name.endsWith(ext))
-}
+import { matchGlob } from '../parsers/glob.js'
 
 interface TreeNode {
   name: string
   path: string
   type: 'file' | 'directory'
   children?: TreeNode[]
-  sortValue?: unknown
+  data?: Record<string, unknown>
 }
 
-/**
- * For a tree child that represents a single logical entry (either a file or
- * a "collapsed folder" holding an index.* or 2-letter locale files), return
- * the absolute path to the file whose frontmatter should be read.
- */
-async function resolveSourceAbs(
-  childAbs: string,
-  type: 'file' | 'directory'
-): Promise<string | null> {
-  if (type === 'file') return childAbs
-  try {
-    const entries = await readdir(childAbs, { withFileTypes: true })
-    const supported = entries.filter((e) => e.isFile() && isSupported(e.name))
-    const indexFile = supported.find(
-      (e) => basename(e.name, extname(e.name)) === 'index'
-    )
-    if (indexFile) return join(childAbs, indexFile.name)
-    const allLocale =
-      supported.length > 0 &&
-      supported.every((e) => basename(e.name, extname(e.name)).length === 2)
-    if (allLocale) {
-      const first = [...supported].sort((a, b) =>
-        a.name.localeCompare(b.name)
-      )[0]
-      return join(childAbs, first.name)
-    }
-  } catch {}
-  return null
+interface IncludeSpec {
+  pattern: string
+  fields: string[]
+}
+
+function parseIncludeParams(raw: string[]): IncludeSpec[] {
+  // Each entry: "<glob>:<field1>[,<field2>...]".
+  const out: IncludeSpec[] = []
+  for (const p of raw) {
+    const idx = p.indexOf(':')
+    if (idx < 0) continue
+    const pattern = p.slice(0, idx)
+    const fields = p
+      .slice(idx + 1)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (pattern && fields.length) out.push({ pattern, fields })
+  }
+  return out
 }
 
 async function buildTree(
   dir: string,
   contentRoot: string,
-  sortByFolder: Map<string, string>
+  includes: IncludeSpec[]
 ): Promise<TreeNode[]> {
   const entries = await readdir(dir, { withFileTypes: true })
   const nodes: TreeNode[] = []
@@ -61,7 +48,7 @@ async function buildTree(
     const fullPath = join(dir, entry.name)
     const relPath = relative(contentRoot, fullPath)
     if (entry.isDirectory()) {
-      const children = await buildTree(fullPath, contentRoot, sortByFolder)
+      const children = await buildTree(fullPath, contentRoot, includes)
       nodes.push({
         name: entry.name,
         path: relPath,
@@ -73,38 +60,32 @@ async function buildTree(
     }
   }
 
-  // If this folder has a sort field requested, attach sortValue to each child.
-  const dirRel = relative(contentRoot, dir)
-  const field = sortByFolder.get(dirRel)
-  if (field) {
+  // Attach requested frontmatter fields to files whose path matches an
+  // include glob. Folder grouping (index files, locale folders) stays on
+  // the client, so directories are never inspected here.
+  if (includes.length > 0) {
     await Promise.all(
-      nodes.map(async (child) => {
-        const source = await resolveSourceAbs(
-          join(dir, child.name),
-          child.type
-        )
-        if (!source) return
-        const fm = await getFrontmatter(source)
-        const v = getByPath(fm, field)
-        if (v !== undefined) child.sortValue = v as unknown
+      nodes.map(async (node) => {
+        if (node.type !== 'file') return
+        const fields = new Set<string>()
+        for (const inc of includes) {
+          if (matchGlob(node.path, inc.pattern)) {
+            for (const f of inc.fields) fields.add(f)
+          }
+        }
+        if (fields.size === 0) return
+        const fm = await getFrontmatter(join(dir, node.name))
+        const data: Record<string, unknown> = {}
+        for (const f of fields) {
+          const v = getByPath(fm, f)
+          if (v !== undefined) data[f] = v
+        }
+        if (Object.keys(data).length > 0) node.data = data
       })
     )
   }
 
   return nodes
-}
-
-function parseSortParams(raw: string[]): Map<string, string> {
-  // Each entry: "<folderPath>:<fieldName>". folderPath may be empty for root.
-  const out = new Map<string, string>()
-  for (const p of raw) {
-    const idx = p.indexOf(':')
-    if (idx < 0) continue
-    const folder = p.slice(0, idx)
-    const field = p.slice(idx + 1)
-    if (field) out.set(folder, field)
-  }
-  return out
 }
 
 export const treeRoutes = new Hono()
@@ -113,7 +94,7 @@ treeRoutes.get('/', async (c) => {
   const config = await loadConfig()
   const contentRoot = join(ROOT_DIR, config.contentDir)
   const url = new URL(c.req.url)
-  const sortByFolder = parseSortParams(url.searchParams.getAll('sort'))
-  const tree = await buildTree(contentRoot, contentRoot, sortByFolder)
+  const includes = parseIncludeParams(url.searchParams.getAll('include'))
+  const tree = await buildTree(contentRoot, contentRoot, includes)
   return c.json(tree)
 })

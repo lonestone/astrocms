@@ -11,10 +11,18 @@ import {
   isSupportedFile,
   stripExtension,
 } from '../../common/utils/supportedFiles.js'
-import { useFolderSort, DEFAULT_SORT } from '../hooks/useFolderSort.js'
+import {
+  useFolderSort,
+  DEFAULT_SORT,
+  type FolderSort,
+} from '../hooks/useFolderSort.js'
 import { hasSupportedFiles } from '../utils/treeHelpers.js'
 import { highlightMatch } from '../utils/highlightMatch.js'
-import { formatSortValue, sortTreeChildren } from '../utils/treeSort.js'
+import {
+  formatSortValue,
+  getNodeFieldValue,
+  sortTreeChildren,
+} from '../utils/treeSort.js'
 import { InlineRenameInput } from './InlineRenameInput.js'
 import { RowActions } from './RowActions.js'
 
@@ -33,7 +41,7 @@ export interface TreeItemProps {
   onStartRename: (path: string) => void
   onSubmitRename: (node: TreeNode, newName: string) => void | Promise<void>
   onCancelRename: () => void
-  parentSortField?: string
+  inheritedSort?: FolderSort
   isCollectionFolder: (path: string) => boolean
   matchIndices?: Map<string, number[]>
   searching?: boolean
@@ -55,14 +63,14 @@ export function TreeItem(props: TreeItemProps) {
     onStartRename,
     onSubmitRename,
     onCancelRename,
-    parentSortField,
+    inheritedSort,
     isCollectionFolder,
     matchIndices,
     searching,
   } = props
 
-  const locked = isCollectionFolder(node.path)
-  const isRenaming = renamingPath === node.path && !locked
+  const isCollection = isCollectionFolder(node.path)
+  const isRenaming = renamingPath === node.path && !isCollection
 
   const expanded = openFolders.has(node.path)
   const isFile = node.type === 'file'
@@ -78,12 +86,20 @@ export function TreeItem(props: TreeItemProps) {
 
   const isRealFolder = !isFile && !isCollapsedFolder
 
-  const { sort, isDefault } = useFolderSort(node.path)
+  const { sort: ownSort, isDefault: ownSortIsDefault } = useFolderSort(
+    node.path
+  )
+  // Only collection folders define their own sort; everything below inherits
+  // the nearest ancestor collection's sort.
+  const effectiveSort: FolderSort = isCollection
+    ? ownSort
+    : inheritedSort ?? DEFAULT_SORT
+  const effectiveSortIsDefault = effectiveSort.field === DEFAULT_SORT.field
 
   const sortedChildren = useMemo(() => {
     if (!isRealFolder || !node.children) return node.children
-    return sortTreeChildren(node.children, sort)
-  }, [isRealFolder, node.children, sort])
+    return sortTreeChildren(node.children, effectiveSort)
+  }, [isRealFolder, node.children, effectiveSort])
 
   if (isFile && !isSupported) return null
   // During search, filterTree has already decided what to include — trust it.
@@ -110,14 +126,19 @@ export function TreeItem(props: TreeItemProps) {
   const FolderIcon = expanded && isRealFolder ? MdFolder : MdFolderOpen
   const CollectionIcon = expanded ? BsDatabaseFill : BsDatabase
 
+  // Display each row's value for the ancestor collection's sort field.
+  const displayField =
+    inheritedSort && inheritedSort.field !== DEFAULT_SORT.field
+      ? inheritedSort.field
+      : undefined
+  const sortFieldValue = displayField
+    ? getNodeFieldValue(node, displayField)
+    : undefined
   const sortValueLabel =
-    parentSortField && node.sortValue !== undefined
-      ? formatSortValue(node.sortValue)
-      : ''
+    sortFieldValue !== undefined ? formatSortValue(sortFieldValue) : ''
 
-  // Field used for sorting this folder's own children (to pass down)
-  const ownSortField =
-    sort.field !== DEFAULT_SORT.field ? sort.field : undefined
+  // Sort that descendants should inherit.
+  const childInheritedSort = effectiveSortIsDefault ? undefined : effectiveSort
 
   return (
     <div>
@@ -150,7 +171,7 @@ export function TreeItem(props: TreeItemProps) {
               isSelected ? 'text-white' : 'text-text-muted'
             }`}
           />
-        ) : locked ? (
+        ) : isCollection ? (
           <CollectionIcon
             className={`w-3.5 h-3.5 shrink-0 ${
               isSelected ? 'text-white' : 'text-primary'
@@ -180,7 +201,7 @@ export function TreeItem(props: TreeItemProps) {
             </span>
             {sortValueLabel && (
               <span
-                title={`${parentSortField}: ${sortValueLabel}`}
+                title={`${displayField}: ${sortValueLabel}`}
                 className={`shrink-0 max-w-[40%] overflow-hidden text-ellipsis whitespace-nowrap text-2xs group-hover:hidden ${
                   isSelected ? 'text-white/80' : 'text-text-muted'
                 }`}
@@ -190,7 +211,8 @@ export function TreeItem(props: TreeItemProps) {
             )}
             <RowActions
               isRealFolder={isRealFolder}
-              sortIsDefault={isDefault}
+              showSort={isCollection}
+              sortIsDefault={ownSortIsDefault}
               isSelected={!!isSelected}
               onNewFile={() => onRequestCreateFile(node.path)}
               onOpenSortMenu={(e) => {
@@ -232,7 +254,7 @@ export function TreeItem(props: TreeItemProps) {
               onStartRename={onStartRename}
               onSubmitRename={onSubmitRename}
               onCancelRename={onCancelRename}
-              parentSortField={ownSortField}
+              inheritedSort={childInheritedSort}
               isCollectionFolder={isCollectionFolder}
               matchIndices={matchIndices}
               searching={searching}

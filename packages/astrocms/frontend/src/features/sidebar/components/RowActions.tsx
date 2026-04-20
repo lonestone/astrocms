@@ -3,6 +3,7 @@ import { MdAdd, MdSort, MdMoreHoriz } from 'react-icons/md'
 
 interface Props {
   isRealFolder: boolean
+  showSort: boolean
   sortIsDefault: boolean
   isSelected: boolean
   onNewFile: () => void
@@ -12,6 +13,7 @@ interface Props {
 
 export function RowActions({
   isRealFolder,
+  showSort,
   sortIsDefault,
   isSelected,
   onNewFile,
@@ -40,21 +42,23 @@ export function RowActions({
           >
             <MdAdd className="w-full h-full" />
           </button>
-          <button
-            type="button"
-            aria-label="Sort"
-            onClick={onOpenSortMenu}
-            className={`${iconBase} ${
-              sortActive
-                ? isSelected
-                  ? 'text-yellow-200 opacity-100'
-                  : 'text-primary opacity-100'
-                : `${mutedColor} opacity-0 group-hover:opacity-100 focus:opacity-100`
-            }`}
-            title="Sort"
-          >
-            <MdSort className="w-full h-full" />
-          </button>
+          {showSort && (
+            <button
+              type="button"
+              aria-label="Sort"
+              onClick={onOpenSortMenu}
+              className={`${iconBase} ${
+                sortActive
+                  ? isSelected
+                    ? 'text-yellow-200 opacity-100'
+                    : 'text-primary opacity-100'
+                  : `${mutedColor} opacity-0 group-hover:opacity-100 focus:opacity-100`
+              }`}
+              title="Sort"
+            >
+              <MdSort className="w-full h-full" />
+            </button>
+          )}
         </>
       )}
       <button

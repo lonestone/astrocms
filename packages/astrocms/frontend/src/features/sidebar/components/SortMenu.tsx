@@ -130,7 +130,7 @@ export function SortMenu({ x, y, schema, current, onChange, onClose }: Props) {
                     : 'text-text-muted'
                 }`}
               >
-                <MdArrowUpward className="w-3.5 h-3.5" />
+                <MdArrowDownward className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
@@ -145,7 +145,7 @@ export function SortMenu({ x, y, schema, current, onChange, onClose }: Props) {
                     : 'text-text-muted'
                 }`}
               >
-                <MdArrowDownward className="w-3.5 h-3.5" />
+                <MdArrowUpward className="w-3.5 h-3.5" />
               </button>
             </span>
           </div>

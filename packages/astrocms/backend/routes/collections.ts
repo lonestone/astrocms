@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getCollections } from '../parsers/schemas.js'
+import { getCollections } from '../parsers/collections.js'
 
 export const collectionsRoutes = new Hono()
 

@@ -1,4 +1,5 @@
 import type { TreeNode } from '../../../api.js'
+import { getFolderTarget } from '../../common/utils/folderTarget.js'
 import { DEFAULT_SORT, type FolderSort } from '../hooks/useFolderSort.js'
 
 function compareValues(a: unknown, b: unknown): number {
@@ -34,6 +35,19 @@ export function formatSortValue(v: unknown): string {
   return s
 }
 
+/**
+ * Read a field from a node's data. Files carry data directly; a folder that
+ * collapses to a single target file (index.* or the first locale) borrows
+ * that target's data.
+ */
+export function getNodeFieldValue(node: TreeNode, field: string): unknown {
+  if (node.type === 'file') return node.data?.[field]
+  const targetPath = getFolderTarget(node)
+  if (!targetPath) return undefined
+  const target = node.children?.find((c) => c.path === targetPath)
+  return target?.data?.[field]
+}
+
 export function sortTreeChildren(
   children: TreeNode[],
   sort: FolderSort
@@ -43,7 +57,10 @@ export function sortTreeChildren(
     return sort.order === 'desc' ? sorted.reverse() : sorted
   }
   const sorted = [...children].sort((a, b) => {
-    const cmp = compareValues(a.sortValue, b.sortValue)
+    const cmp = compareValues(
+      getNodeFieldValue(a, sort.field),
+      getNodeFieldValue(b, sort.field)
+    )
     if (cmp !== 0) return cmp
     return a.name.localeCompare(b.name)
   })

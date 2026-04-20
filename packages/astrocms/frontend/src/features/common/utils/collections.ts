@@ -62,6 +62,23 @@ export function resolveCollection(
   return undefined
 }
 
+/**
+ * Folder paths (relative to contentDir) that are collection roots. For a
+ * glob-loader collection we use its `base` when defined, otherwise fall back
+ * to the collection name. File-loader collections have no folder counterpart.
+ */
+export function getCollectionFolderPaths(
+  collections: Record<string, CollectionInfo>
+): Set<string> {
+  const out = new Set<string>()
+  for (const [name, info] of Object.entries(collections)) {
+    if (info.loader === 'file') continue
+    if (info.base) out.add(info.base)
+    else out.add(name)
+  }
+  return out
+}
+
 export function getSchemaForFile(
   filePath: string,
   collections: Record<string, CollectionInfo>

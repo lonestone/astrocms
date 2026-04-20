@@ -61,7 +61,7 @@ export interface TreeNode {
   path: string
   type: 'file' | 'directory'
   children?: TreeNode[]
-  sortValue?: unknown
+  data?: Record<string, unknown>
 }
 
 export interface GitFile {
@@ -71,12 +71,12 @@ export interface GitFile {
 }
 
 export async function fetchTree(
-  sorts: { folder: string; field: string }[] = []
+  includes: { pattern: string; fields: string[] }[] = []
 ): Promise<TreeNode[]> {
-  const qs = sorts
+  const qs = includes
     .map(
-      ({ folder, field }) =>
-        `sort=${encodeURIComponent(`${folder}:${field}`)}`
+      ({ pattern, fields }) =>
+        `include=${encodeURIComponent(`${pattern}:${fields.join(',')}`)}`
     )
     .join('&')
   const res = await authFetch(qs ? `/tree?${qs}` : `/tree`)

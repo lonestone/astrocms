@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   MdDriveFileRenameOutline,
   MdContentCopy,
@@ -9,6 +9,7 @@ import {
 } from 'react-icons/md'
 import { useLocation, useNavigate } from 'react-router'
 import type { TreeNode, FrontmatterFieldSchema } from '../../../api.js'
+import { getCollectionFolderPaths } from '../../common/utils/collections.js'
 import { useResizablePanel } from '../../common/hooks/useResizablePanel.js'
 import { ResizeHandle } from '../../common/components/ResizeHandle.js'
 import { useCollections } from '../hooks/useCollections.js'
@@ -78,11 +79,16 @@ export function Sidebar({ tree, onSelectFile }: Props) {
     return info?.schema ?? undefined
   }
 
-  /** True when `path` is a top-level folder that's a known content collection. */
-  function isCollectionFolder(path: string): boolean {
-    if (!path || path.includes('/')) return false
-    return path in collections
-  }
+  const collectionFolderPaths = useMemo(
+    () => getCollectionFolderPaths(collections),
+    [collections]
+  )
+
+  /** True when `path` is a collection root (glob base or fallback name). */
+  const isCollectionFolder = useCallback(
+    (path: string) => collectionFolderPaths.has(path),
+    [collectionFolderPaths]
+  )
 
   function openActionsMenu(node: TreeNode, x: number, y: number) {
     setMenu({ kind: 'actions', node, x, y })
