@@ -17,7 +17,7 @@ import FrontmatterEditor, {
 import React from 'react'
 import EditorHeader from './EditorHeader.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
-import type { TreeNode } from '../../../api.js'
+import { useFiles } from '../../file/contexts/FilesContext.js'
 import { getLocaleSiblings } from '../../common/utils/folderTarget.js'
 import { getSchemaForFile } from '../../common/utils/collections.js'
 import { useCollections } from '../../sidebar/hooks/useCollections.js'
@@ -30,12 +30,12 @@ import {
 } from '../utils/dataFormats.js'
 
 interface Props {
-  tree: TreeNode[]
   onSelectFile: (path: string) => void
 }
 
-export function Editor({ tree, onSelectFile }: Props) {
+export function Editor({ onSelectFile }: Props) {
   const filePath = useFilePath()!
+  const { tree } = useFiles()
   const format = useMemo(() => getDataFormat(filePath), [filePath])
   const dataOnly = isDataFormat(format)
 
@@ -172,7 +172,6 @@ export function Editor({ tree, onSelectFile }: Props) {
   return (
     <div className="flex flex-col h-full">
       <EditorHeader
-        tree={tree}
         isDirty={isDirty}
         isSaving={saveFile.isPending}
         localeSiblings={localeSiblings}

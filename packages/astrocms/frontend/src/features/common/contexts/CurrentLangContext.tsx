@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react'
-import type { TreeNode } from '../../../api.js'
+import { useFiles } from '../../file/contexts/FilesContext.js'
 import { getLocaleSiblings } from '../utils/folderTarget.js'
 import {
   collectLocalesInTree,
@@ -44,12 +44,12 @@ function getBrowserLang(): string | null {
 }
 
 interface Props {
-  tree: TreeNode[]
   filePath: string | null
   children: React.ReactNode
 }
 
-export function CurrentLangProvider({ tree, filePath, children }: Props) {
+export function CurrentLangProvider({ filePath, children }: Props) {
+  const { tree } = useFiles()
   const [currentLang, setState] = useState<string | null>(loadInitial)
 
   const setCurrentLang = useCallback((lang: string | null) => {
