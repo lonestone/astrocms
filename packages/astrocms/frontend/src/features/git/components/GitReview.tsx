@@ -21,7 +21,7 @@ export function GitReview() {
   const commit = useGitCommit()
   const stage = useGitStage()
   const unstage = useGitUnstage()
-  const { isAuthenticated, sendPrompt, isRunning, startNewConversation } =
+  const { isAuthenticated, sendInNewConversation, isRunning } =
     useAgentRuntime()
 
   const [message, setMessage] = useState('')
@@ -60,18 +60,11 @@ export function GitReview() {
 
   function handleAutoCommit() {
     if (isRunning) return
-    const list = staged.map((f) => `- ${f.path}`).join('\n')
-    const prompt = [
-      'Commit and push the following staged files.',
-      '',
-      'Files:',
-      list || '(no staged files — stage the changes first)',
-      '',
-      'Write a concise conventional commit message that explains WHY, then run `git commit` and `git push`.',
-    ].join('\n')
-    // Start from a clean thread so unrelated prior context doesn't bleed in.
-    startNewConversation()
-    sendPrompt(prompt)
+    const prompt =
+      'Commit the staged files with a concise conventional commit message that explains WHY, then push.'
+    // Always open a fresh conversation so prior context doesn't bleed in
+    // and each publish gets its own session on the backend.
+    sendInNewConversation(prompt)
   }
 
   return (
@@ -168,13 +161,15 @@ export function GitReview() {
                 }
                 className="flex-1 px-3 py-2 border border-border rounded-md text-sm outline-none focus:border-primary"
               />
-              <Button
-                variant="success"
-                onClick={() => handleCommit(true)}
-                disabled={!canCommit || commit.isPending}
-              >
-                {commit.isPending ? '...' : `Publish (${stagedCount})`}
-              </Button>
+              <Tooltip content="Commit & push">
+                <Button
+                  variant="success"
+                  onClick={() => handleCommit(true)}
+                  disabled={!canCommit || commit.isPending}
+                >
+                  {commit.isPending ? '...' : `Publish (${stagedCount})`}
+                </Button>
+              </Tooltip>
             </div>
             {commit.error && (
               <div className="text-xs text-danger">{commit.error.message}</div>

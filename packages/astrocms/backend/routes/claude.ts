@@ -28,6 +28,9 @@ const allowedTools = [
   'Bash(ls:*)',
   'Bash(find:*)',
   'Bash(git:*)',
+  'Bash(mkdir:*)',
+  'Bash(cd * && git commit*)',
+  'Bash(cd * && git push*)',
 ]
 
 // --- Permission request handling ---

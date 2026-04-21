@@ -49,6 +49,7 @@ interface AgentRuntimeContextValue {
   startNewConversation: () => void
   selectConversation: (id: string) => Promise<void>
   sendPrompt: (prompt: string) => void
+  sendInNewConversation: (prompt: string) => Promise<void>
   requestOpen: () => void
   isRunning: boolean
 }
@@ -116,7 +117,7 @@ export function AgentRuntimeProvider({ children, onRequestOpen }: Props) {
 
   const runtime = useChatRuntime({ transport })
 
-  const startNewConversation = useCallback(() => {
+  const resetSession = useCallback(() => {
     setSessionId(null)
     setLoadedMessages(null)
     writeStoredSessionId(null)
@@ -139,7 +140,7 @@ export function AgentRuntimeProvider({ children, onRequestOpen }: Props) {
         sessionId={sessionId}
         loadedMessages={loadedMessages}
         conversations={conversations}
-        startNewConversation={startNewConversation}
+        resetSession={resetSession}
         selectConversation={selectConversation}
         onRequestOpen={onRequestOpen}
       >
@@ -158,7 +159,7 @@ interface BridgeProps {
   sessionId: string | null
   loadedMessages: any[] | null
   conversations: Conversation[]
-  startNewConversation: () => void
+  resetSession: () => void
   selectConversation: (id: string) => Promise<void>
   onRequestOpen: () => void
 }
@@ -172,7 +173,7 @@ function AgentRuntimeBridge({
   sessionId,
   loadedMessages,
   conversations,
-  startNewConversation,
+  resetSession,
   selectConversation,
   onRequestOpen,
 }: BridgeProps) {
@@ -180,6 +181,14 @@ function AgentRuntimeBridge({
   const isRunning = useAuiState((s) => s.thread.isRunning)
   const requestOpenRef = useRef(onRequestOpen)
   requestOpenRef.current = onRequestOpen
+
+  const startNewConversation = useCallback(() => {
+    resetSession()
+    // Reset the assistant-ui thread state so existing messages don't
+    // carry over into the next send. Without this, switching sessionId
+    // alone isn't enough — aui keeps the thread populated.
+    aui.threads().switchToNewThread()
+  }, [aui, resetSession])
 
   const sendPrompt = useCallback(
     (prompt: string) => {
@@ -189,6 +198,23 @@ function AgentRuntimeBridge({
       aui.thread().append(text)
     },
     [aui]
+  )
+
+  // Force a brand-new thread and send a prompt atomically. Calling
+  // `startNewConversation()` followed by `sendPrompt()` synchronously can
+  // race with the assistant-ui thread switch — the append then lands on
+  // the outgoing thread. Awaiting `switchToNewThread` before `append`
+  // guarantees the message opens a fresh Claude session every time.
+  const sendInNewConversation = useCallback(
+    async (prompt: string) => {
+      const text = prompt.trim()
+      if (!text) return
+      requestOpenRef.current()
+      resetSession()
+      await aui.threads().switchToNewThread()
+      aui.thread().append(text)
+    },
+    [aui, resetSession]
   )
 
   const requestOpen = useCallback(() => {
@@ -207,6 +233,7 @@ function AgentRuntimeBridge({
       startNewConversation,
       selectConversation,
       sendPrompt,
+      sendInNewConversation,
       requestOpen,
       isRunning,
     }),
@@ -221,6 +248,7 @@ function AgentRuntimeBridge({
       startNewConversation,
       selectConversation,
       sendPrompt,
+      sendInNewConversation,
       requestOpen,
       isRunning,
     ]
