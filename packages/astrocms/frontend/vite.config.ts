@@ -14,9 +14,14 @@ export default defineConfig({
   server: {
     port: 4002,
     proxy: {
-      '/astrocms/api': 'http://localhost:4001',
-      '/astrocms/content': 'http://localhost:4001',
-      '/astrocms/assets': 'http://localhost:4001',
+      // Use regex so any /astrocms/(api|content|assets)/* path is proxied,
+      // independent of how Vite normalizes the request path internally. A
+      // plain prefix pattern can end up shadowed by Vite's SPA fallback for
+      // certain routes, which returns index.html instead of the API JSON.
+      '^/astrocms/(api|content|assets)(/|$)': {
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+      },
     },
   },
 })

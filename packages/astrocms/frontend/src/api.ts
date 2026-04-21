@@ -112,16 +112,18 @@ export async function saveFile(
   return res.json()
 }
 
-export async function fetchGitStatus(): Promise<{ files: GitFile[] }> {
+export async function fetchGitStatus(): Promise<{
+  files: GitFile[]
+  remote?: RemoteStatus
+}> {
   const res = await authFetch(`/git/status`)
   return res.json()
 }
 
-export async function fetchGitDiff(path?: string): Promise<{ diff: string }> {
-  const url = path
-    ? `/git/diff?path=${encodeURIComponent(path)}`
-    : `/git/diff`
-  const res = await authFetch(url)
+export async function fetchGitDiffs(): Promise<{
+  diffs: Record<string, string>
+}> {
+  const res = await authFetch(`/git/diffs`)
   return res.json()
 }
 
@@ -151,6 +153,41 @@ export async function gitUnstage(paths: string[]): Promise<{ ok: boolean }> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paths }),
+  })
+  return res.json()
+}
+
+export interface RemoteStatus {
+  updateAvailable: boolean
+  behind: number
+  lastCheckedAt: number | null
+  lastPulledAt: number | null
+  error?: string
+  branch: string
+}
+
+export async function fetchGitRemoteStatus(): Promise<RemoteStatus> {
+  const res = await authFetch(`/git/remote-status`)
+  return res.json()
+}
+
+export async function gitPull(): Promise<{
+  ok: boolean
+  output?: string
+  error?: string
+}> {
+  const res = await authFetch(`/git/pull`, { method: 'POST' })
+  return res.json()
+}
+
+export async function gitDiscardHunk(
+  path: string,
+  hunk: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await authFetch(`/git/discard-hunk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, hunk }),
   })
   return res.json()
 }
