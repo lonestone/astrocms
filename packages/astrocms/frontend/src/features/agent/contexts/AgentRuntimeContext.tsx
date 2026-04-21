@@ -8,7 +8,7 @@ import React, {
   useState,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AssistantRuntimeProvider, useAui } from '@assistant-ui/react'
+import { AssistantRuntimeProvider, useAui, useAuiState } from '@assistant-ui/react'
 import {
   useChatRuntime,
   AssistantChatTransport,
@@ -50,6 +50,7 @@ interface AgentRuntimeContextValue {
   selectConversation: (id: string) => Promise<void>
   sendPrompt: (prompt: string) => void
   requestOpen: () => void
+  isRunning: boolean
 }
 
 const AgentRuntimeContext = createContext<AgentRuntimeContextValue | null>(null)
@@ -176,6 +177,7 @@ function AgentRuntimeBridge({
   onRequestOpen,
 }: BridgeProps) {
   const aui = useAui()
+  const isRunning = useAuiState((s) => s.thread.isRunning)
   const requestOpenRef = useRef(onRequestOpen)
   requestOpenRef.current = onRequestOpen
 
@@ -206,6 +208,7 @@ function AgentRuntimeBridge({
       selectConversation,
       sendPrompt,
       requestOpen,
+      isRunning,
     }),
     [
       status,
@@ -219,6 +222,7 @@ function AgentRuntimeBridge({
       selectConversation,
       sendPrompt,
       requestOpen,
+      isRunning,
     ]
   )
 

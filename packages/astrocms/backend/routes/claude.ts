@@ -27,6 +27,7 @@ const allowedTools = [
   'NotebookEdit',
   'Bash(ls:*)',
   'Bash(find:*)',
+  'Bash(git:*)',
 ]
 
 // --- Permission request handling ---

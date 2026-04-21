@@ -3,6 +3,7 @@ import { FiRefreshCw } from 'react-icons/fi'
 import { RiSparkling2Line } from 'react-icons/ri'
 import { useQueryClient } from '@tanstack/react-query'
 import Button from '../../common/components/Button.js'
+import { Tooltip } from '../../common/components/Tooltip.js'
 import { useAgentRuntime } from '../../agent/contexts/AgentRuntimeContext.js'
 import {
   useGitCommit,
@@ -20,7 +21,8 @@ export function GitReview() {
   const commit = useGitCommit()
   const stage = useGitStage()
   const unstage = useGitUnstage()
-  const { isAuthenticated, sendPrompt } = useAgentRuntime()
+  const { isAuthenticated, sendPrompt, isRunning, startNewConversation } =
+    useAgentRuntime()
 
   const [message, setMessage] = useState('')
 
@@ -57,6 +59,7 @@ export function GitReview() {
   }
 
   function handleAutoCommit() {
+    if (isRunning) return
     const list = staged.map((f) => `- ${f.path}`).join('\n')
     const prompt = [
       'Commit and push the following staged files.',
@@ -66,6 +69,8 @@ export function GitReview() {
       '',
       'Write a concise conventional commit message that explains WHY, then run `git commit` and `git push`.',
     ].join('\n')
+    // Start from a clean thread so unrelated prior context doesn't bleed in.
+    startNewConversation()
     sendPrompt(prompt)
   }
 
@@ -131,18 +136,20 @@ export function GitReview() {
         <div className="absolute left-0 right-0 bottom-0 z-20 border-t border-border bg-white px-6 py-3 shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]">
           <div className="flex flex-col gap-3 max-w-5xl mx-auto">
             {isAuthenticated && stagedCount > 0 && (
-              <button
-                type="button"
-                onClick={handleAutoCommit}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-primary text-white hover:opacity-95 cursor-pointer shadow-md"
-                aria-label="Let AI commit and push"
-                tabIndex={0}
-              >
-                <RiSparkling2Line size={16} />
-                <span className="font-semibold text-sm">
-                  Let AI commit &amp; push ({stagedCount})
-                </span>
-              </button>
+              <Tooltip content="Agent will generate a commit message and push">
+                <button
+                  type="button"
+                  onClick={handleAutoCommit}
+                  disabled={isRunning}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-primary text-white shadow-md enabled:hover:opacity-95 enabled:cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  tabIndex={0}
+                >
+                  <RiSparkling2Line size={16} />
+                  <span className="font-semibold text-sm">
+                    {isRunning ? 'AI is working...' : `Publish (${stagedCount})`}
+                  </span>
+                </button>
+              </Tooltip>
             )}
             <div className="flex gap-2">
               <input
@@ -151,24 +158,22 @@ export function GitReview() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && canCommit) {
                     e.preventDefault()
-                    handleCommit(e.ctrlKey || e.metaKey)
+                    handleCommit(true)
                   }
                 }}
-                placeholder="Commit message..."
+                placeholder={
+                  isAuthenticated && stagedCount > 0
+                    ? 'or enter manual commit message...'
+                    : 'Enter commit message...'
+                }
                 className="flex-1 px-3 py-2 border border-border rounded-md text-sm outline-none focus:border-primary"
               />
-              <Button
-                onClick={() => handleCommit(false)}
-                disabled={!canCommit || commit.isPending}
-              >
-                {commit.isPending ? '...' : `Commit (${stagedCount})`}
-              </Button>
               <Button
                 variant="success"
                 onClick={() => handleCommit(true)}
                 disabled={!canCommit || commit.isPending}
               >
-                Commit &amp; push
+                {commit.isPending ? '...' : `Publish (${stagedCount})`}
               </Button>
             </div>
             {commit.error && (
