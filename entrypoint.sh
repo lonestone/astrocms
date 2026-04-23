@@ -1,6 +1,15 @@
 #!/bin/sh
 set -e
 
+# A single persistent volume mounted at /data holds both the cloned project
+# (/data/app) and the Claude Code auth (/data/claude). Symlink each into the
+# path the rest of the system expects, so neither the app nor Claude needs to
+# know about /data.
+mkdir -p /data/app /data/claude
+rm -rf /app /root/.claude
+ln -s /data/app /app
+ln -s /data/claude /root/.claude
+
 BRANCH="${GIT_BRANCH:-main}"
 WORK_DIR="/app"
 

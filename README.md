@@ -175,8 +175,7 @@ docker run -d \
   -e GIT_REPO_URL=https://github.com/user/repo \
   -e GIT_PAT=github_pat_xxx \
   -e ASTROCMS_PASSWORD=secret \
-  -v astrocms-data:/app \
-  -v astrocms-claude:/root/.claude \
+  -v astrocms-data:/data \
   ghcr.io/lonestone/astrocms:latest
 ```
 
@@ -193,24 +192,22 @@ services:
       - GIT_PAT=${GIT_PAT}
       - ASTROCMS_PASSWORD=${ASTROCMS_PASSWORD}
     volumes:
-      - app-data:/app
-      - claude-auth:/root/.claude
+      - astrocms-data:/data
     restart: unless-stopped
 
 volumes:
-  app-data:
-  claude-auth:
+  astrocms-data:
 ```
 
 All config variables from the table above (`ASTROCMS_CONTENT_DIR`, `ASTROCMS_DEV_CMD`, etc.) can be passed through the same way.
 
-The `app-data` volume is persistent: if a clone already exists at startup, it is reused and fast-forwarded against the remote instead of re-cloned. The `claude-auth` volume persists the Claude Code login across restarts. The container always serves on port `4001` internally; change the host-side mapping to expose it elsewhere.
+The container uses a single persistent volume at `/data`. Inside, `/data/app` holds the cloned project (reused and fast-forwarded on restart instead of re-cloned) and `/data/claude` persists the Claude Code login across restarts. Both paths are symlinked into `/app` and `/root/.claude` at startup. The container always serves on port `4001` internally; change the host-side mapping to expose it elsewhere.
 
 The CMS UI and its API live under `/astrocms`. Visit `http://localhost:4001/astrocms` to open it.
 
-### Stateless mode (no persistent volumes)
+### Stateless mode (no persistent volume)
 
-Drop the volume mounts to make the container fully disposable. Every time it starts, it clones the repo fresh and the Claude login is reset:
+Drop the volume mount to make the container fully disposable. Every time it starts, it clones the repo fresh and the Claude login is reset:
 
 ```yaml
 services:
@@ -231,10 +228,8 @@ Things to know before using it:
 
 - **Slower startup.** The repo is cloned and dependencies reinstalled on every container start (expect anywhere from 10 seconds to a few minutes depending on repo size and dependency count).
 - **Local commits must be pushed before the container stops.** Anything committed in the CMS but not yet pushed is lost when the container is recreated. The "Commit and push" button in the CMS is the only safe workflow.
-- **Claude Code re-login on every start.** Without the `claude-auth` volume, you have to re-authenticate Claude Code each time the container comes up. If you use the AI agent, keep at least the `claude-auth` volume.
+- **Claude Code re-login on every start.** Without the persistent `/data` volume, you have to re-authenticate Claude Code each time the container comes up.
 - **Bandwidth and rate limits.** Frequent restarts mean frequent clones; on large repos this can hit GitHub's rate limits or slow cold starts noticeably.
-
-A common middle ground is to keep `claude-auth` persistent and let `/app` be ephemeral, so you get a clean clone on every restart without having to re-login Claude each time.
 
 ### Serving the website alongside the CMS
 

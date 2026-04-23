@@ -10,19 +10,20 @@ RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /astrocms
 
-# Install astrocms package
-COPY packages/astrocms/package.json packages/astrocms/package-lock.json* ./
-RUN npm ci || npm install
+# Install astrocms package. The package lives in a workspace monorepo, so
+# there is no standalone lockfile to copy; npm install regenerates one.
+COPY packages/astrocms/package.json ./
+RUN npm install
 
 COPY packages/astrocms ./
 
 # Build CMS frontend
 RUN npx vite build --config frontend/vite.config.ts
 
-# Configure git for commits inside the container
-RUN git config --global --add safe.directory /app
-
-WORKDIR /app
+# /app and /root/.claude are symlinked into /data by the entrypoint at
+# runtime, so mark both the symlink and the real path as safe for git.
+RUN git config --global --add safe.directory /app \
+ && git config --global --add safe.directory /data/app
 
 EXPOSE 4001
 

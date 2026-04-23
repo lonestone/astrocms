@@ -18,10 +18,8 @@ services:
       - ASTROCMS_DEV_PORT=${ASTROCMS_DEV_PORT}
       - ASTROCMS_INSTALL_CMD=${ASTROCMS_INSTALL_CMD}
     volumes:
-      - app-data:/app
-      - claude-auth:/root/.claude
+      - astrocms-data:/data
     restart: unless-stopped
 
 volumes:
-  app-data:
-  claude-auth:
+  astrocms-data:
