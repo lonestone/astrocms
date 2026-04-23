@@ -1,6 +1,6 @@
 {
   "name": "astrocms",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A headless CMS for Astro with a built-in AI agent for editing content.",
   "type": "module",
   "license": "MIT",

@@ -174,7 +174,9 @@ export function GitFileDiff({ path, diff }: Props) {
                     >
                       {marker}
                     </span>
-                    <span className="whitespace-pre">{line.text || ' '}</span>
+                    <span className="whitespace-pre-wrap break-all min-w-0 flex-1">
+                      {line.text || ' '}
+                    </span>
                   </div>
                 )
               })}

@@ -33,6 +33,10 @@ export function Header({
         <HeaderAgentPrompt />
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        <HeaderMenu />
+        <Button active={agentOpen} onClick={onToggleAgent}>
+          Agent
+        </Button>
         {config?.devServer && (
           <a
             href="/"
@@ -43,10 +47,6 @@ export function Header({
             Preview <FiExternalLink className="ml-1 align-middle" />
           </a>
         )}
-        <HeaderMenu />
-        <Button active={agentOpen} onClick={onToggleAgent}>
-          Agent
-        </Button>
         {changeCount > 0 && (
           <Button variant="success" onClick={onNavigateGit}>
             <span className="inline-flex items-center gap-1.5">

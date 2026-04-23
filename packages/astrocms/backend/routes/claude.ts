@@ -95,10 +95,7 @@ claudeRoutes.get('/status', async (c) => {
     statusCache &&
     Date.now() - statusCache.timestamp < STATUS_CACHE_TTL
   ) {
-    return c.json(
-      statusCache.result,
-      statusCache.result.authenticated ? 200 : 401
-    )
+    return c.json(statusCache.result)
   }
 
   const abortController = new AbortController()
@@ -130,7 +127,7 @@ claudeRoutes.get('/status', async (c) => {
         account,
       }
       statusCache = { result, timestamp: Date.now() }
-      return c.json(result, 401)
+      return c.json(result)
     }
 
     const result = { authenticated: true as const, account }
@@ -143,7 +140,7 @@ claudeRoutes.get('/status', async (c) => {
       error instanceof Error ? error.message : 'Authentication required'
     const result = { authenticated: false as const, error: message }
     statusCache = { result, timestamp: Date.now() }
-    return c.json(result, 401)
+    return c.json(result)
   }
 })
 
