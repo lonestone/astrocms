@@ -3,6 +3,7 @@ import { join } from 'path'
 import * as ts from 'typescript'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
+import { extractRawFrontmatter } from '../../shared/frontmatter.js'
 
 export interface PropSchema {
   name: string
@@ -115,8 +116,7 @@ function resolveType(
 // Detects <slot> tags in the template and Astro.slots.render/has calls in
 // the frontmatter. Empty string "" represents the default (unnamed) slot.
 function parseSlots(source: string): string[] {
-  const fmMatch = source.match(/^---\n([\s\S]*?)\n---/)
-  const frontmatter = fmMatch ? fmMatch[1] : ''
+  const frontmatter = extractRawFrontmatter(source) ?? ''
   const parts = source.split('---')
   const template = parts.slice(2).join('---')
 
@@ -147,8 +147,8 @@ function parseComponent(source: string): {
   props: PropSchema[]
   slots: string[]
 } {
-  const fmMatch = source.match(/^---\n([\s\S]*?)\n---/)
-  const props = fmMatch ? parseProps(fmMatch[1]) : []
+  const frontmatter = extractRawFrontmatter(source)
+  const props = frontmatter ? parseProps(frontmatter) : []
   const slots = parseSlots(source)
   return { props, slots }
 }

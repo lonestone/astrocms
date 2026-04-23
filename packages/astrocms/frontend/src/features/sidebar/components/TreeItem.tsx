@@ -148,9 +148,13 @@ export function TreeItem(props: TreeItemProps) {
   const CollectionIcon = expanded ? BsDatabaseFill : BsDatabase
 
   // Display label: custom name field's value when the ancestor collection
-  // asks for one, falling back to the filename.
+  // asks for one, falling back to the filename. Only files and collapsed
+  // folders (which act as a direct file link) can borrow a content's title;
+  // collections always keep their own name, and expanded folders keep theirs
+  // to avoid shadowing siblings.
+  const canBorrowContentTitle = isFile || (!isCollection && isCollapsedFolder)
   const customName =
-    effectiveNameField !== FILENAME_FIELD
+    effectiveNameField !== FILENAME_FIELD && canBorrowContentTitle
       ? getNodeFieldValue(node, effectiveNameField, effectiveLang)
       : undefined
   const fallbackLabel = isFile ? stripExtension(node.name) : node.name

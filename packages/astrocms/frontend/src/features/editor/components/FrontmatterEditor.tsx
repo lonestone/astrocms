@@ -1,47 +1,40 @@
 import React, { useCallback } from 'react'
-import YAML from 'yaml'
 import type { FrontmatterFieldSchema } from '../../../api.js'
 import { PropInput, formatLabel } from './PropInput.js'
+import type { FrontmatterData } from '../../../../../shared/frontmatter.js'
 
-// ---------------------------------------------------------------------------
-// YAML frontmatter parsing / serialization
-// ---------------------------------------------------------------------------
-
-export type FrontmatterData = Record<string, unknown>
-
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/
-
-/** Extract raw YAML string from markdown content */
-export function extractRawFrontmatter(content: string): string | undefined {
-  const match = content.match(FRONTMATTER_RE)
-  return match ? match[1] : undefined
-}
-
-/** Remove frontmatter block from markdown, returning the body */
-export function extractBody(content: string): string {
-  return content.replace(FRONTMATTER_RE, '').replace(/^\r?\n/, '')
-}
+export type { FrontmatterData }
 
 const ESM_LINE_RE = /^(import\s|export\s)/
 
-/** Extract import/export lines from body (MDXEditor does not preserve them) */
+/**
+ * Extract leading import/export lines from the body (MDXEditor does not
+ * preserve them). Only the prelude is scanned: we collect ESM lines from the
+ * top of the file, tolerating blank lines between them, and stop at the first
+ * real content line. ESM appearing later in the document (e.g. inside code
+ * blocks) is left untouched.
+ */
 export function extractEsmLines(body: string): {
   esm: string
   content: string
 } {
   const lines = body.split('\n')
   const esmLines: string[] = []
-  const contentLines: string[] = []
-  for (const line of lines) {
+  let splitAt = 0
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     if (ESM_LINE_RE.test(line)) {
       esmLines.push(line)
+      splitAt = i + 1
+    } else if (line.trim() === '') {
+      continue
     } else {
-      contentLines.push(line)
+      break
     }
   }
   return {
     esm: esmLines.join('\n'),
-    content: contentLines.join('\n').replace(/^\n+/, ''),
+    content: lines.slice(splitAt).join('\n').replace(/^\n+/, ''),
   }
 }
 
@@ -49,35 +42,6 @@ export function extractEsmLines(body: string): {
 export function combineEsmAndContent(esm: string, content: string): string {
   if (!esm) return content
   return esm + '\n\n' + content
-}
-
-/** Parse YAML frontmatter string into data */
-export function parseFrontmatterYaml(yaml: string): FrontmatterData {
-  const result = YAML.parse(yaml)
-  return result && typeof result === 'object' ? result : {}
-}
-
-/** Serialize frontmatter data to YAML */
-export function serializeFrontmatterYaml(data: FrontmatterData): string {
-  // Filter out empty values
-  const filtered: FrontmatterData = {}
-  for (const [key, value] of Object.entries(data)) {
-    if (value === '' || value === undefined || value === null) continue
-    if (Array.isArray(value) && value.length === 0) continue
-    filtered[key] = value
-  }
-  if (Object.keys(filtered).length === 0) return ''
-  return YAML.stringify(filtered, { lineWidth: 0 }).trimEnd()
-}
-
-/** Combine frontmatter data and body into full markdown content */
-export function combineFrontmatterAndBody(
-  data: FrontmatterData,
-  body: string
-): string {
-  const yaml = serializeFrontmatterYaml(data)
-  if (!yaml) return body
-  return `---\n${yaml}\n---\n\n${body}`
 }
 
 /** Convert a frontmatter value to a display string for form inputs */
@@ -89,10 +53,6 @@ function toDisplayValue(value: unknown): string {
   }
   return String(value)
 }
-
-// ---------------------------------------------------------------------------
-// FrontmatterEditor component
-// ---------------------------------------------------------------------------
 
 interface Props {
   schema: FrontmatterFieldSchema[]

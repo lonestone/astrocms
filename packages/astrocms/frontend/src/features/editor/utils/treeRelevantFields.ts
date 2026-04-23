@@ -5,7 +5,7 @@ import {
   getDefaultNameField,
   getDefaultSort,
 } from '../../sidebar/utils/collectionDefaults.js'
-import type { FrontmatterData } from '../components/FrontmatterEditor.js'
+import type { FrontmatterData } from '../../../../../shared/frontmatter.js'
 
 /**
  * Fields whose value drives the sidebar tree (sort field + display-name

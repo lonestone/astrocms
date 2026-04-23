@@ -1,6 +1,6 @@
 {
   "name": "astrocms",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A headless CMS for Astro with a built-in AI agent for editing content.",
   "type": "module",
   "license": "MIT",
@@ -28,6 +28,7 @@
   },
   "files": [
     "backend",
+    "shared",
     "dist",
     "bin",
     "patches"

@@ -6,14 +6,16 @@ import { MDXEditor, type MDXEditorMethods } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
 import { createPlugins } from './plugins.js'
 import FrontmatterEditor, {
+  extractEsmLines,
+  combineEsmAndContent,
+} from './FrontmatterEditor.js'
+import {
   type FrontmatterData,
   extractBody,
   extractRawFrontmatter,
   parseFrontmatterYaml,
   combineFrontmatterAndBody,
-  extractEsmLines,
-  combineEsmAndContent,
-} from './FrontmatterEditor.js'
+} from '../../../../../shared/frontmatter.js'
 import React from 'react'
 import EditorHeader from './EditorHeader.js'
 import { useFilePath } from '../contexts/FilePathContext.js'

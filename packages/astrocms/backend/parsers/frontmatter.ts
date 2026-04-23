@@ -1,24 +1,17 @@
 import { readFile, stat } from 'fs/promises'
 import { extname } from 'path'
-import YAML from 'yaml'
+import {
+  parseFileFrontmatter,
+  type FrontmatterData,
+} from '../../shared/frontmatter.js'
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/
-
-const cache = new Map<
-  string,
-  { mtimeMs: number; frontmatter: Record<string, unknown> }
->()
+const cache = new Map<string, { mtimeMs: number; frontmatter: FrontmatterData }>()
 
 /**
  * Read & parse frontmatter for a supported content file.
  * Cached in-memory; re-parsed only when the file's mtime changes.
- *
- * For .md/.mdx: parses the YAML frontmatter block.
- * For .yaml/.yml/.json: parses the whole document as frontmatter.
  */
-export async function getFrontmatter(
-  absPath: string
-): Promise<Record<string, unknown>> {
+export async function getFrontmatter(absPath: string): Promise<FrontmatterData> {
   let mtimeMs: number
   try {
     const s = await stat(absPath)
@@ -30,23 +23,10 @@ export async function getFrontmatter(
   const cached = cache.get(absPath)
   if (cached && cached.mtimeMs === mtimeMs) return cached.frontmatter
 
-  const ext = extname(absPath)
-  let frontmatter: Record<string, unknown> = {}
+  let frontmatter: FrontmatterData = {}
   try {
     const content = await readFile(absPath, 'utf-8')
-    if (ext === '.md' || ext === '.mdx') {
-      const m = content.match(FRONTMATTER_RE)
-      if (m) {
-        const parsed = YAML.parse(m[1])
-        if (parsed && typeof parsed === 'object') frontmatter = parsed
-      }
-    } else if (ext === '.yaml' || ext === '.yml') {
-      const parsed = YAML.parse(content)
-      if (parsed && typeof parsed === 'object') frontmatter = parsed
-    } else if (ext === '.json') {
-      const parsed = JSON.parse(content)
-      if (parsed && typeof parsed === 'object') frontmatter = parsed
-    }
+    frontmatter = parseFileFrontmatter(content, extname(absPath))
   } catch {
     frontmatter = {}
   }
