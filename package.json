@@ -1,6 +1,6 @@
 {
   "name": "astrocms-monorepo",
-  "private": true,
+  "license": "MIT",
   "scripts": {
     "postinstall": "patch-package"
   },

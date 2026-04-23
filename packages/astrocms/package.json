@@ -1,13 +1,33 @@
 {
   "name": "astrocms",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "A headless CMS for Astro with a built-in AI agent for editing content.",
   "type": "module",
+  "license": "MIT",
+  "author": "Godefroy de Compreignac",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lonestone/astrocms.git"
+  },
+  "homepage": "https://github.com/lonestone/astrocms#readme",
+  "bugs": {
+    "url": "https://github.com/lonestone/astrocms/issues"
+  },
+  "keywords": [
+    "astro",
+    "cms",
+    "headless-cms",
+    "content-management",
+    "ai",
+    "agent",
+    "markdown",
+    "mdx"
+  ],
   "bin": {
-    "astrocms": "./bin/astrocms.js"
+    "astrocms": "bin/astrocms.js"
   },
   "files": [
     "backend",
-    "frontend",
     "dist",
     "bin",
     "patches"
@@ -16,7 +36,9 @@
     "dev": "tsx watch backend/server.ts & vite dev --config frontend/vite.config.ts",
     "dev:server": "tsx watch backend/server.ts",
     "dev:frontend": "vite dev --config frontend/vite.config.ts",
-    "build": "vite build --config frontend/vite.config.ts"
+    "build": "vite build --config frontend/vite.config.ts",
+    "prepack": "cp ../../README.md ./README.md",
+    "postpack": "rm -f ./README.md"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.20",
