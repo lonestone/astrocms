@@ -6,12 +6,12 @@ This guide is for contributors hacking on AstroCMS itself. If you just want to u
 
 The repo is an npm workspaces monorepo:
 
-- `packages/astrocms/` — the published `astrocms` package
-  - `backend/` — Hono backend (`server.ts` entry, `routes/`, `config.ts`, `root.ts`, `stubs/`)
-  - `frontend/` — React 19 + Vite SPA
-  - `bin/astrocms.js` — CLI entry point
-- `example/` — a minimal Astro site wired to the local `astrocms` package — the sandbox for testing changes
-- `Dockerfile` / `entrypoint.sh` — Docker image that clones a git repo and runs AstroCMS
+- `packages/astrocms/` holds the published `astrocms` package
+  - `backend/` contains the Hono backend (`server.ts` entry, `routes/`, `config.ts`, `root.ts`, `stubs/`)
+  - `frontend/` is the React 19 + Vite SPA
+  - `bin/astrocms.js` is the CLI entry point
+- `example/` is a minimal Astro site wired to the local `astrocms` package, acting as the sandbox for testing changes
+- `Dockerfile` / `entrypoint.sh` define a Docker image that clones a git repo and runs AstroCMS
 
 ## Getting started
 
@@ -31,7 +31,7 @@ There are two modes, exposed by the CLI in `packages/astrocms/bin/astrocms.js`:
 | Command | What it does | When to use |
 |---|---|---|
 | `astrocms` | Builds the frontend once (if `dist/` is missing), then starts the Hono backend which serves the prebuilt SPA. | Normal CMS use. This is what end users run. |
-| `astrocms --dev` | Runs the backend with `tsx watch` and the frontend with `vite dev` (HMR). | Hacking on AstroCMS — source changes reload instantly. |
+| `astrocms --dev` | Runs the backend with `tsx watch` and the frontend with `vite dev` (HMR). | Hacking on AstroCMS, with source changes reloading instantly. |
 
 The `example/package.json` pre-wires both:
 
@@ -59,15 +59,25 @@ npm run build         # build the frontend SPA to dist/
 
 ## Docker image
 
+For end-user deployments, point users at the published image on GHCR documented in the [README](./README.md#deploying-with-docker). The section below is for hacking on the `Dockerfile` or `entrypoint.sh` locally.
+
+### Building locally
+
+The repo ships a [`docker-compose.yml`](./docker-compose.yml) that builds the image from the local `Dockerfile` and wires every env var documented in the [README](./README.md#configuration):
+
 ```bash
-docker compose up
+docker compose up --build
 ```
 
-See the [README](./README.md#deploying-with-docker) for the env vars and PAT setup. The image clones the repo from `GIT_REPO_URL` into a persistent `app-data` volume, then runs `astrocms`.
+Populate `.env` using `.env.example` before running.
+
+### Publishing
+
+The `.github/workflows/docker-publish.yml` workflow publishes to `ghcr.io/lonestone/astrocms` on every push to `main`. It reads the version from `packages/astrocms/package.json` and skips the build if that tag already exists on the registry. To ship a new image, bump the version in `packages/astrocms/package.json` and push to `main`. The workflow tags each successful build with `X.Y.Z`, `X.Y`, and `latest`, and builds for both `linux/amd64` and `linux/arm64`.
 
 ## Environment variables at a glance
 
-- `ASTROCMS_ROOT` — target Astro project root. Defaults to `process.cwd()`. The CLI sets it automatically for the running process.
-- `ASTROCMS_DEV` — set to `1` by the CLI when `--dev` is passed; the backend skips static serving so Vite can own the frontend.
-- `ASTROCMS_PASSWORD`, `GIT_*`, and `ASTROCMS_*` config overrides — see the [README](./README.md#configuration).
-- Port selection — pass `--port <n>` to the CLI (`astrocms --port 5000`). Defaults to `4001`.
+- `ASTROCMS_ROOT`: target Astro project root. Defaults to `process.cwd()`. The CLI sets it automatically for the running process.
+- `ASTROCMS_DEV`: set to `1` by the CLI when `--dev` is passed; the backend skips static serving so Vite can own the frontend.
+- `ASTROCMS_PASSWORD`, `GIT_*`, and `ASTROCMS_*` config overrides: see the [README](./README.md#configuration).
+- Port selection: pass `--port <n>` to the CLI (`astrocms --port 5000`). Defaults to `4001`.

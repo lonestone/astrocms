@@ -6,7 +6,7 @@ AstroCMS edits your Markdown and MDX files directly, manages media assets, commi
 
 ## Why AstroCMS
 
-- **No database.** Your content lives in your repo as Markdown/MDX — AstroCMS just edits the files.
+- **No database.** Your content lives in your repo as Markdown/MDX, and AstroCMS just edits the files.
 - **Git-native workflow.** Changes are staged, committed, and pushed to GitHub directly from the UI.
 - **Schema-aware.** Frontmatter forms are auto-generated from the Zod schemas in your `content.config.ts`.
 - **MDX-ready.** Edit rich MDX visually, including your own Astro components with typed props and slots.
@@ -16,9 +16,9 @@ AstroCMS edits your Markdown and MDX files directly, manages media assets, commi
 
 - **Visual MDX editor** with a frontmatter form generated from your Zod collection schemas
 - **File tree browser** for all Astro content collections
-- **Astro component discovery** — insert your own components into MDX with prop and slot editing
+- **Astro component discovery** for inserting your own components into MDX with prop and slot editing
 - **Media upload** to your configured assets directory
-- **Git integration** — status, diff, stage, commit, and push without leaving the browser
+- **Git integration** with status, diff, stage, commit, and push without leaving the browser
 - **Claude Code agent** (optional) for AI-assisted writing and editing
 - **Password protection** for deployed instances
 
@@ -31,7 +31,7 @@ AstroCMS edits your Markdown and MDX files directly, manages media assets, commi
 
 Setup takes two steps. Really.
 
-### Option 1 — as a project dependency
+### Option 1, as a project dependency
 
 Install it, then add a script:
 
@@ -53,7 +53,7 @@ Run it from your project:
 npm run astrocms
 ```
 
-### Option 2 — global install
+### Option 2, global install
 
 Install once, use on any Astro project:
 
@@ -120,26 +120,121 @@ Deployment-only environment variables:
 
 A `.env` file at the project root is auto-loaded when running `astrocms` locally. Shell variables take precedence over `.env` values.
 
+## Best practices
+
+### Pass components to `<Content />` rather than importing them in MDX
+
+MDX lets you `import` Astro components directly inside a `.mdx` file. It works, but **AstroCMS hides import statements in the visual editor** to keep MDX authoring WYSIWYG. If a page relies on imports inside the MDX, editors will still see the components but will not be able to manage or remove the imports from the editor UI.
+
+The recommended pattern is to keep MDX files import-free and pass components through Astro's `<Content components={...} />` prop from the consuming page, like [`example/src/pages/[lang]/blog/[slug].astro`](./example/src/pages/%5Blang%5D/blog/%5Bslug%5D.astro):
+
+```astro
+---
+import { render } from 'astro:content'
+import { mdxComponents } from '../../../components'
+// ...
+const { Content } = await render(post)
+---
+
+<Content components={mdxComponents} />
+```
+
+### Auto-register every component in `componentsDir`
+
+To keep the component list in sync with `ASTROCMS_COMPONENTS_DIR` (what the CMS shows in the MDX editor) without maintaining it by hand, use Vite's `import.meta.glob` to build the map automatically. See [`example/src/components/index.ts`](./example/src/components/index.ts):
+
+```ts
+const modules = import.meta.glob('./**/*.astro', { eager: true })
+
+export const mdxComponents: Record<string, any> = Object.fromEntries(
+  Object.entries(modules).map(([path, mod]) => [
+    path.split('/').pop()!.replace('.astro', ''),
+    (mod as any).default,
+  ])
+)
+```
+
+This way, any `.astro` file you drop into the components directory becomes available in MDX at both build time and in the CMS editor, with nothing to wire up.
+
 ## Deploying with Docker
 
-Use the provided Docker image to clone and serve a git-hosted Astro project:
+AstroCMS publishes a prebuilt image to GitHub Container Registry on every release: `ghcr.io/lonestone/astrocms`. It clones a git-hosted Astro project into a persistent volume and serves the CMS.
+
+Available tags:
+
+- `latest`: most recent release
+- `X.Y.Z`: a specific version (e.g. `0.1.2`), pinned for reproducibility
+- `X.Y`: latest patch of a minor line (e.g. `0.1`)
+
+### Quickstart with `docker run`
 
 ```bash
-docker compose up
+docker run -d \
+  --name astrocms \
+  -p 4001:4001 \
+  -e GIT_REPO_URL=https://github.com/user/repo \
+  -e GIT_PAT=github_pat_xxx \
+  -e ASTROCMS_PASSWORD=secret \
+  -v astrocms-data:/app \
+  -v astrocms-claude:/root/.claude \
+  ghcr.io/lonestone/astrocms:latest
 ```
 
-Configure via `.env` (see `.env.example`):
+### With `docker compose`
 
-```env
-GIT_REPO_URL=https://github.com/user/repo
-GIT_BRANCH=main
-GIT_PAT=ghp_xxx
-ASTROCMS_PASSWORD=secret
+```yaml
+services:
+  cms:
+    image: ghcr.io/lonestone/astrocms:latest
+    ports:
+      - '4001:4001'
+    environment:
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_PAT=${GIT_PAT}
+      - ASTROCMS_PASSWORD=${ASTROCMS_PASSWORD}
+    volumes:
+      - app-data:/app
+      - claude-auth:/root/.claude
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  claude-auth:
 ```
 
-The `app-data` volume is persistent: if a clone already exists at startup, it is reused instead of re-cloned. The container always serves on port `4001` internally; change the host-side mapping in `docker-compose.yml` to expose it elsewhere.
+All config variables from the table above (`ASTROCMS_CONTENT_DIR`, `ASTROCMS_DEV_CMD`, etc.) can be passed through the same way.
+
+The `app-data` volume is persistent: if a clone already exists at startup, it is reused and fast-forwarded against the remote instead of re-cloned. The `claude-auth` volume persists the Claude Code login across restarts. The container always serves on port `4001` internally; change the host-side mapping to expose it elsewhere.
 
 The CMS UI and its API live under `/astrocms`. Visit `http://localhost:4001/astrocms` to open it.
+
+### Stateless mode (no persistent volumes)
+
+Drop the volume mounts to make the container fully disposable. Every time it starts, it clones the repo fresh and the Claude login is reset:
+
+```yaml
+services:
+  cms:
+    image: ghcr.io/lonestone/astrocms:latest
+    ports:
+      - '4001:4001'
+    environment:
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_PAT=${GIT_PAT}
+      - ASTROCMS_PASSWORD=${ASTROCMS_PASSWORD}
+    restart: unless-stopped
+```
+
+Pick this mode for Kubernetes deployments where pods are interchangeable, for preview environments that spin up per branch, or any setup where you want a clean state on every restart.
+
+Things to know before using it:
+
+- **Slower startup.** The repo is cloned and dependencies reinstalled on every container start (expect anywhere from 10 seconds to a few minutes depending on repo size and dependency count).
+- **Local commits must be pushed before the container stops.** Anything committed in the CMS but not yet pushed is lost when the container is recreated. The "Commit and push" button in the CMS is the only safe workflow.
+- **Claude Code re-login on every start.** Without the `claude-auth` volume, you have to re-authenticate Claude Code each time the container comes up. If you use the AI agent, keep at least the `claude-auth` volume.
+- **Bandwidth and rate limits.** Frequent restarts mean frequent clones; on large repos this can hit GitHub's rate limits or slow cold starts noticeably.
+
+A common middle ground is to keep `claude-auth` persistent and let `/app` be ephemeral, so you get a clean clone on every restart without having to re-login Claude each time.
 
 ### Serving the website alongside the CMS
 
@@ -161,7 +256,7 @@ With that, `http://localhost:4001/` serves the live site and `http://localhost:4
 3. **Repository permissions**:
    - **Contents**: `Read and write` (required for clone, pull, push)
    - **Metadata**: `Read-only` (selected automatically)
-4. Click **Generate token** and copy the value — it's shown only once.
+4. Click **Generate token** and copy the value, which is shown only once.
 5. Paste it into `.env` as `GIT_PAT=github_pat_...`.
 
 No other permissions are needed.
