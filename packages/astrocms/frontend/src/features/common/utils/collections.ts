@@ -1,41 +1,20 @@
+import picomatch from 'picomatch'
 import type { CollectionInfo, FrontmatterFieldSchema } from '../../../api.js'
 
 /**
- * Minimal glob-to-regex for Astro content patterns like:
- *   - `**\/*.mdx`
- *   - `**\/*.{md,mdx}`
- *   - `*.yaml`
+ * Match a file path (forward-slash separated, relative to the base) against
+ * one or more glob patterns.
+ *
+ * Delegates to `picomatch`, the exact engine Astro's `glob()` loader uses to
+ * decide collection membership, so the behavior here stays identical to Astro
+ * for `**`, `*`, `?`, `{a,b}` brace groups, and `[...]` / `[^...]` / `[!...]`
+ * character classes. Kept in sync with the backend's `parsers/glob.ts`.
  */
-function globToRegex(pattern: string): RegExp {
-  const groups: string[] = []
-  let idx = 0
-  let p = pattern.replace(/\{([^{}]+)\}/g, (_, g) => {
-    groups.push(g)
-    return `\x00${idx++}\x00`
-  })
-  p = p.replace(/[.+^$|()\\[\]]/g, '\\$&')
-  p = p
-    .replace(/\*\*\//g, '\x01')
-    .replace(/\*\*/g, '\x02')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\?/g, '[^/]')
-    .replace(/\x01/g, '(?:.*/)?')
-    .replace(/\x02/g, '.*')
-  p = p.replace(/\x00(\d+)\x00/g, (_, i) => {
-    const alts = groups[Number(i)]
-      .split(',')
-      .map((s) => s.replace(/[.+^$|()\\[\]*?]/g, '\\$&'))
-    return `(?:${alts.join('|')})`
-  })
-  return new RegExp(`^${p}$`)
-}
-
 export function matchGlob(
   filePath: string,
   patterns: string | string[]
 ): boolean {
-  const list = Array.isArray(patterns) ? patterns : [patterns]
-  return list.some((p) => globToRegex(p).test(filePath))
+  return picomatch.isMatch(filePath, patterns)
 }
 
 /**
