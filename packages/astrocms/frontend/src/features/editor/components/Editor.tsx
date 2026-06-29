@@ -191,10 +191,21 @@ export function Editor({ onSelectFile }: Props) {
     return () => clearTimeout(timer)
   }, [ready, isDirty, saveFile.isPending, body, frontmatter, handleSave])
 
-  const handleBodyChange = useCallback((markdown: string) => {
-    setBody(markdown)
-    bodyRef.current = markdown
-  }, [])
+  const handleBodyChange = useCallback(
+    (markdown: string, initialMarkdownNormalize: boolean) => {
+      setBody(markdown)
+      bodyRef.current = markdown
+      // MDXEditor (Lexical) reformats the source when it first loads the
+      // markdown (bullet symbols, whitespace, escaping...). That fires onChange
+      // with initialMarkdownNormalize=true. Adopt the normalized form as the
+      // baseline so this reformatting is not treated as a user edit and never
+      // gets auto-saved.
+      if (initialMarkdownNormalize) {
+        setOriginalBody(markdown)
+      }
+    },
+    []
+  )
 
   const handleFrontmatterChange = useCallback((data: FrontmatterData) => {
     setFrontmatter(data)
