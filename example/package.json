@@ -11,11 +11,15 @@
     "astrocms:dev": "astrocms --dev"
   },
   "dependencies": {
-    "@astrojs/mdx": "^5.0.2",
-    "@tailwindcss/vite": "^4.2.2",
-    "astro": "^6.0.6",
+    "@astrojs/mdx": "^7.0.7",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.2.4",
     "astrocms": "*",
-    "tailwindcss": "^4.2.2",
+    "cookie": "^2.0.1",
+    "tailwindcss": "^4.3.3",
     "unist-util-visit": "^5.1.0"
+  },
+  "comments": {
+    "cookie": "Astro's prerender entry (built into dist/.prerender/) imports 'cookie' bare and relies on ambient Node resolution. Astro 7 needs cookie ^2 (ESM), while express (pulled in transitively by astrocms' AI provider) needs cookie 0.x (CJS). Depending on npm hoisting, the CJS copy can end up at the workspace root and shadow Astro's ESM one, breaking `astro build` with \"Named export 'parseCookie' not found\". Declaring cookie ^2 here guarantees an ESM copy is resolvable from this workspace regardless of hoisting."
   }
 }
