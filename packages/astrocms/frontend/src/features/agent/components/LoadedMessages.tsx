@@ -5,6 +5,7 @@ import {
   ToolCallBlock,
   ToolResultBlock,
 } from './messages/index.js'
+import { TbRobot } from 'react-icons/tb'
 import { Arrow } from './messages/Arrow.js'
 import { stripRolePrefix } from './messages/utils.js'
 
@@ -40,8 +41,10 @@ export function LoadedMessages({ messages }: Props) {
           subagentMessages={subagentMessages}
         />
       ))}
-      <div className="mb-3 text-[10px] text-text-muted text-center">
-        — conversation resumed —
+      <div className="mb-3 flex items-center gap-3 text-xs text-text-faint">
+        <span className="h-px flex-1 bg-border" />
+        Conversation resumed
+        <span className="h-px flex-1 bg-border" />
       </div>
     </>
   )
@@ -171,16 +174,15 @@ function AgentBlock({
   const [resultOpen, setResultOpen] = useState(false)
 
   return (
-    <div className="mb-3 rounded-md border border-indigo-200 bg-indigo-50/50 overflow-hidden">
-      <div className="px-3 py-1.5 flex items-center gap-2">
-        <span className="text-[11px] font-semibold text-indigo-800">
-          Agent
-        </span>
-        <span className="text-[10px] text-indigo-600 truncate">
+    <div className="mb-2 overflow-hidden rounded-md border border-border bg-surface-raised">
+      <div className="flex items-center gap-2 px-2.5 py-1.5">
+        <TbRobot size={15} className="shrink-0 text-text-muted" />
+        <span className="text-xs font-semibold text-text">Agent</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-text-muted">
           {description}
         </span>
       </div>
-      <div className="px-2 py-1 border-t border-indigo-200">
+      <div className="border-t border-border bg-surface-inset px-2 pt-2">
         {subSteps.map((step: any, j: number) => (
           <SubagentStep key={j} msg={step} resultMap={subResultMap} />
         ))}
@@ -188,16 +190,16 @@ function AgentBlock({
       {resultText && (
         <>
           <button
+            type="button"
             onClick={() => setResultOpen(!resultOpen)}
-            className="w-full flex items-center gap-1 px-3 py-1 text-[10px] text-indigo-700 hover:bg-indigo-100 cursor-pointer border-t border-indigo-200"
-            aria-label={resultOpen ? 'Collapse result' : 'Expand result'}
-            tabIndex={0}
+            className="flex w-full items-center gap-1 border-t border-border px-2.5 py-1 text-xs text-text-muted cursor-pointer transition-colors hover:bg-surface-hover hover:text-text"
+            aria-expanded={resultOpen}
           >
             <Arrow open={resultOpen} />
             Result
           </button>
           {resultOpen && (
-            <div className="border-t border-indigo-200">
+            <div className="border-t border-border px-2 pt-2">
               <TextBlock text={resultText} variant="assistant" />
             </div>
           )}

@@ -12,9 +12,7 @@ import {
   useMdastNodeUpdater,
   useLexicalNodeRemove,
   useNestedEditorContext,
-  iconComponentFor$,
 } from '@mdxeditor/editor'
-import { useCellValue } from '@mdxeditor/gurx'
 import {
   $createNodeSelection,
   $createParagraphNode,
@@ -27,6 +25,13 @@ import {
   KEY_ENTER_COMMAND,
 } from 'lexical'
 import type { ComponentDescriptor, PropSchema } from '../../../api.js'
+import {
+  TbComponents,
+  TbCopy,
+  TbGripVertical,
+  TbTrash,
+} from 'react-icons/tb'
+import { IconButton } from '../../common/components/IconButton.js'
 import { PropInput } from './PropInput.js'
 import JsonTableEditor from './JsonTableEditor.js'
 import SlotEditor from './SlotEditor.js'
@@ -62,7 +67,6 @@ export function CustomJsxEditor({ mdastNode, descriptor }: JsxEditorProps) {
   const updateMdastNode = useMdastNodeUpdater()
   const removeNode = useLexicalNodeRemove()
   const { parentEditor, lexicalNode } = useNestedEditorContext()
-  const iconComponentFor = useCellValue(iconComponentFor$)
   const meta = useContext(ComponentMetaContext)
   const componentMeta = mdastNode.name ? meta[mdastNode.name] : undefined
 
@@ -227,10 +231,12 @@ export function CustomJsxEditor({ mdastNode, descriptor }: JsxEditorProps) {
   const hasBody = descriptor.props.length > 0 || slots.length > 0
 
   return (
-    <div ref={blockRef} className="relative my-1">
+    <div ref={blockRef} className="relative my-2">
       <div
-        className={`border rounded transition-colors duration-150 ${
-          selected ? 'border-gray-400' : 'border-gray-200'
+        className={`overflow-hidden rounded-panel border transition-colors duration-150 ${
+          selected
+            ? 'border-accent ring-2 ring-ring'
+            : 'border-border hover:border-border-strong'
         }`}
       >
         {/* Header */}
@@ -239,40 +245,39 @@ export function CustomJsxEditor({ mdastNode, descriptor }: JsxEditorProps) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onClick={handleSelect}
-          className={`flex items-center justify-between px-2 py-1 bg-gray-100 text-xs font-mono cursor-grab ${
-            hasBody ? 'border-b border-gray-200 rounded-t' : 'rounded'
+          className={`flex cursor-grab items-center gap-2 bg-surface px-2.5 py-1.5 text-ui active:cursor-grabbing ${
+            hasBody ? 'border-b border-border' : ''
           }`}
         >
-          <span className="font-semibold text-gray-500 select-none">
+          <TbGripVertical size={16} className="shrink-0 text-text-faint" />
+          <TbComponents size={16} className="shrink-0 text-accent-text" />
+          <span className="flex-1 select-none truncate font-mono font-medium text-text-secondary">
             {componentName}
           </span>
           <span className="flex gap-0.5">
-            <button
+            <IconButton
+              label="Duplicate component"
+              size="sm"
               onClick={handleDuplicate}
-              title="Duplicate"
-              aria-label="Duplicate component"
-              tabIndex={0}
-              className="bg-transparent border-none cursor-pointer text-gray-400 text-xs leading-none p-0.5 rounded-sm hover:text-gray-700"
             >
-              {iconComponentFor('content_copy')}
-            </button>
-            <button
+              <TbCopy size={15} />
+            </IconButton>
+            <IconButton
+              label="Delete component"
+              size="sm"
+              tone="danger"
               onClick={handleDelete}
-              title="Delete"
-              aria-label="Delete component"
-              tabIndex={0}
-              className="bg-transparent border-none cursor-pointer text-gray-400 text-xs leading-none p-0.5 rounded-sm hover:text-red-600"
             >
-              {iconComponentFor('delete_small')}
-            </button>
+              <TbTrash size={15} />
+            </IconButton>
           </span>
         </div>
 
         {/* Props */}
         {descriptor.props.length > 0 && (
           <div
-            className={`flex flex-col gap-0.5 px-2 py-1 text-xs font-mono ${
-              slots.length > 0 ? 'border-b border-gray-200' : ''
+            className={`flex flex-col gap-2 bg-surface-raised px-3 py-2.5 text-ui ${
+              slots.length > 0 ? 'border-b border-border' : ''
             }`}
           >
             {descriptor.props.map(({ name }) => {
@@ -306,12 +311,12 @@ export function CustomJsxEditor({ mdastNode, descriptor }: JsxEditorProps) {
         {slots.map((slotName, i) => (
           <div
             key={slotName}
-            className={`px-2 py-1 ${
-              i < slots.length - 1 ? 'border-b border-gray-200' : ''
-            } ${slotName ? '[&>div:last-child]:pt-8!' : ''}`}
+            className={`relative bg-surface-raised px-3 py-2 ${
+              i < slots.length - 1 ? 'border-b border-border' : ''
+            } ${slotName ? '[&>div:last-child]:pt-6!' : ''}`}
           >
             {slots.length > 1 && (
-              <div className="text-2xs text-gray-400 font-mono mb-0.5 absolute pointer-events-none">
+              <div className="pointer-events-none absolute top-1.5 left-3 font-mono text-xs text-text-faint">
                 {slotName || 'children'}
               </div>
             )}

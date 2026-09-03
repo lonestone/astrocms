@@ -63,7 +63,7 @@ export function useTree() {
     [includeParams]
   )
 
-  const { data: tree = [] } = useQuery({
+  const { data: tree = [], isPending: isLoading } = useQuery({
     queryKey,
     queryFn: () => fetchTree(includeParams),
   })
@@ -72,5 +72,5 @@ export function useTree() {
     queryClient.invalidateQueries({ queryKey: ['tree'] })
   }, [queryClient])
 
-  return { tree, invalidateTree }
+  return { tree, isLoading, invalidateTree }
 }

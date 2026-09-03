@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { startClaudeLogin, submitClaudeLoginCode } from '../../../api.js'
-import { RiLoginBoxLine, RiRefreshLine, RiLoader4Line } from 'react-icons/ri'
+import { TbLoader2, TbLogin2, TbRefresh, TbSparkles } from 'react-icons/tb'
+import Button from '../../common/components/Button.js'
+import { Input } from '../../common/components/Input.js'
 
 interface Props {
   error?: string
@@ -75,82 +77,82 @@ export function AgentAuthError({ error, onRetry }: Props) {
   }
 
   const isLoading = status === 'starting' || status === 'submitting'
+  const shownError =
+    status !== 'awaiting_code' ? loginError || error : null
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4 text-center">
-      <div className="text-text-muted text-xs space-y-2">
-        <p className="font-semibold text-sm text-text">Claude not connected</p>
-        {(loginError || error) && status !== 'awaiting_code' && (
-          <p className="text-[11px] bg-bg-hover rounded p-2 text-left break-words max-h-24 overflow-y-auto">
-            {loginError || error}
-          </p>
-        )}
-        {status === 'awaiting_code' && (
-          <p className="text-[11px]">
-            Authorize in the new tab, copy the code shown by Claude, and paste it below.
-          </p>
-        )}
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-5 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-panel border border-border bg-surface-raised text-text-muted">
+        <TbSparkles size={20} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <p className="text-base font-semibold text-text">Claude is not connected</p>
+        <p className="text-ui text-text-muted">
+          {status === 'awaiting_code'
+            ? 'Authorize in the new tab, then paste the code Claude shows you.'
+            : 'Sign in once to let the agent edit your content.'}
+        </p>
       </div>
 
+      {shownError && (
+        <p className="max-h-24 w-full overflow-y-auto break-words rounded-md border border-danger/30 bg-danger-soft px-2.5 py-2 text-left text-2xs text-danger-text">
+          {shownError}
+        </p>
+      )}
+
       {status === 'awaiting_code' || status === 'submitting' ? (
-        <div className="flex flex-col gap-2 w-full">
-          <input
+        <div className="flex w-full flex-col gap-2">
+          <Input
             type="text"
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
             placeholder="Paste the code here"
             disabled={status === 'submitting'}
-            className="w-full px-2 py-1.5 text-xs rounded-md border border-border bg-bg-hover focus:outline-none focus:border-primary"
+            className="font-mono text-xs"
             autoFocus
           />
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={handleSubmit}
             disabled={!pasted.trim() || status === 'submitting'}
-            className="flex items-center justify-center gap-2 w-full py-2 text-xs font-semibold rounded-md bg-primary text-white hover:opacity-90 cursor-pointer disabled:opacity-70 disabled:cursor-default"
-            tabIndex={0}
+            icon={
+              status === 'submitting' ? (
+                <TbLoader2 size={16} className="animate-spin" />
+              ) : undefined
+            }
           >
-            {status === 'submitting' ? (
-              <>
-                <RiLoader4Line size={14} className="animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              'Submit code'
-            )}
-          </button>
+            {status === 'submitting' ? 'Submitting' : 'Submit code'}
+          </Button>
         </div>
       ) : (
-        <button
+        <Button
+          variant="primary"
+          size="lg"
           onClick={handleStart}
           disabled={isLoading}
-          className="flex items-center justify-center gap-2 w-full py-2 text-xs font-semibold rounded-md bg-primary text-white hover:opacity-90 cursor-pointer disabled:opacity-70 disabled:cursor-default"
-          aria-label="Login with Claude"
-          tabIndex={0}
+          className="w-full"
+          icon={
+            isLoading ? (
+              <TbLoader2 size={16} className="animate-spin" />
+            ) : (
+              <TbLogin2 size={16} />
+            )
+          }
         >
-          {isLoading ? (
-            <>
-              <RiLoader4Line size={14} className="animate-spin" />
-              Starting login...
-            </>
-          ) : (
-            <>
-              <RiLoginBoxLine size={14} />
-              Login with Claude
-            </>
-          )}
-        </button>
+          {isLoading ? 'Starting login' : 'Sign in with Claude'}
+        </Button>
       )}
 
       {!isLoading && (
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onRetry}
-          className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text cursor-pointer"
-          tabIndex={0}
-          aria-label="Retry connection"
+          icon={<TbRefresh size={14} />}
         >
-          <RiRefreshLine size={12} />
-          Retry
-        </button>
+          Retry connection
+        </Button>
       )}
     </div>
   )

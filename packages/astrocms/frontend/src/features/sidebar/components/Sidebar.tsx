@@ -20,6 +20,7 @@ import {
   isLocaleFilename,
   usedLangsInFolder,
 } from '../../file/utils/localeFiles.js'
+import Button from '../../common/components/Button.js'
 import { SortMenuWrapper } from './SortMenuWrapper.js'
 import { SidebarSearch } from './SidebarSearch.js'
 import { TreeItem } from './TreeItem.js'
@@ -163,12 +164,36 @@ export function Sidebar({ onSelectFile }: Props) {
     <>
       <aside
         style={{ width }}
-        className="bg-bg-panel overflow-auto shrink-0 text-sm"
+        className="flex shrink-0 flex-col overflow-auto bg-surface"
       >
         <SidebarSearch query={query} onChange={setQuery} />
         <div className="pb-3 pt-1">
           {searching && filtered.nodes.length === 0 && (
-            <div className="px-3 py-2 text-text-muted">No results</div>
+            <div className="px-3 py-6 text-center text-xs text-text-muted">
+              No file matches "{query.trim()}"
+            </div>
+          )}
+          {files.treeLoading && (
+            <div
+              className="flex flex-col gap-2.5 px-3 pt-2"
+              aria-busy="true"
+              aria-label="Loading files"
+            >
+              {[56, 40, 72, 48, 64].map((w, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="skeleton h-3.5 w-3.5" />
+                  <span className="skeleton h-3" style={{ width: `${w}%` }} />
+                </div>
+              ))}
+            </div>
+          )}
+          {!searching && !files.treeLoading && filtered.nodes.length === 0 && (
+            <div className="flex flex-col items-center gap-2 px-3 py-8 text-center text-xs text-text-muted">
+              <span>No content yet.</span>
+              <Button size="sm" onClick={() => requestCreateFile('')}>
+                Create a file
+              </Button>
+            </div>
           )}
           {filtered.nodes.map((node) => (
             <TreeItem

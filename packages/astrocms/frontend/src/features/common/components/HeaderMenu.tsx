@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { FiDownload, FiMoreHorizontal } from 'react-icons/fi'
+import { TbDots, TbDownload } from 'react-icons/tb'
 import { useGitPull, useGitRemoteStatus } from '../../git/hooks/useGit.js'
+import { IconButton } from './IconButton.js'
+import { MenuItem } from './Menu.js'
 
 export function HeaderMenu() {
   const [open, setOpen] = useState(false)
@@ -33,53 +35,48 @@ export function HeaderMenu() {
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="More actions"
+      <IconButton
+        label="More actions"
         aria-expanded={open}
-        tabIndex={0}
-        className="relative p-1.5 rounded-md text-text-muted hover:bg-gray-100 hover:text-text cursor-pointer"
+        active={open}
+        onClick={() => setOpen((v) => !v)}
+        className="relative"
       >
-        <FiMoreHorizontal size={16} />
+        <TbDots size={18} />
         {updateAvailable && (
           <span
-            className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"
+            className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-warning"
             aria-hidden
           />
         )}
-      </button>
+      </IconButton>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-1 w-60 rounded-md border border-border bg-white shadow-lg py-1 z-50"
+          className="absolute right-0 top-full mt-1.5 w-64 popover-surface p-1 text-ui animate-pop-in"
         >
-          <button
-            type="button"
-            role="menuitem"
+          <MenuItem
             onClick={handlePull}
             disabled={pull.isPending}
-            tabIndex={0}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 disabled:opacity-50 disabled:cursor-default cursor-pointer"
+            icon={<TbDownload size={16} />}
+            trailing={
+              updateAvailable ? (
+                <span className="rounded-full bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-warning-text">
+                  {remote?.behind} new
+                </span>
+              ) : undefined
+            }
           >
-            <FiDownload size={13} className="text-text-muted" />
-            <span className="flex-1">
-              {pull.isPending ? 'Pulling...' : 'Pull from remote'}
-            </span>
-            {updateAvailable && (
-              <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                {remote?.behind} new
-              </span>
-            )}
-          </button>
+            {pull.isPending ? 'Pulling from remote' : 'Pull from remote'}
+          </MenuItem>
           {pull.error && (
-            <div className="px-3 py-2 text-[11px] text-danger">
+            <div className="px-2 py-1.5 text-2xs text-danger-text">
               {pull.error.message}
             </div>
           )}
           {remote?.lastCheckedAt && (
-            <div className="px-3 py-1.5 text-[10px] text-text-muted border-t border-border mt-1">
-              Last check: {new Date(remote.lastCheckedAt).toLocaleTimeString()}
+            <div className="mt-1 border-t border-border px-2 pt-1.5 pb-1 text-2xs text-text-muted">
+              Last check {new Date(remote.lastCheckedAt).toLocaleTimeString()}
             </div>
           )}
         </div>

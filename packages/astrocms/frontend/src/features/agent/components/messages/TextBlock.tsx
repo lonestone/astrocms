@@ -14,7 +14,7 @@ export function TextBlock({ text, variant }: Props) {
   }
 
   return (
-    <div className="mb-3 px-3 py-2 rounded-md whitespace-pre-wrap break-words text-xs leading-relaxed bg-primary text-white">
+    <div className="mb-3 ml-8 whitespace-pre-wrap break-words rounded-panel rounded-tr-md bg-accent px-3.5 py-2.5 text-base leading-relaxed text-accent-fg">
       {text}
     </div>
   )
@@ -25,7 +25,7 @@ function MarkdownBlock({ text }: { text: string }) {
 
   return (
     <div
-      className="mb-3 px-3 py-2 rounded-md break-words text-xs leading-relaxed bg-white text-text border border-border prose-agent"
+      className="prose-agent mb-3 break-words px-1 text-base leading-relaxed text-text"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

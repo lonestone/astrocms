@@ -1,5 +1,5 @@
 import React from 'react'
-import { MdAdd, MdSort, MdMoreHoriz } from 'react-icons/md'
+import { TbArrowsSort, TbDots, TbPlus } from 'react-icons/tb'
 
 interface Props {
   isRealFolder: boolean
@@ -15,16 +15,14 @@ export function RowActions({
   isRealFolder,
   showSort,
   sortIsDefault,
-  isSelected,
   onNewFile,
   onOpenSortMenu,
   onOpenActionsMenu,
 }: Props) {
   const sortActive = !sortIsDefault
-  const iconBase = `w-4 h-4 p-0.5 rounded cursor-pointer shrink-0 ${
-    isSelected ? 'hover:bg-white/20' : 'hover:bg-border'
-  }`
-  const mutedColor = isSelected ? 'text-white' : 'text-text-muted'
+  const iconBase =
+    'flex h-6 w-6 shrink-0 items-center justify-center rounded cursor-pointer text-text-muted transition-colors duration-100 hover:bg-surface-active hover:text-text'
+  const hidden = 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
 
   return (
     <span className="absolute right-1 top-0 bottom-0 flex items-center gap-0.5">
@@ -33,30 +31,26 @@ export function RowActions({
           <button
             type="button"
             aria-label="New file"
+            title="New file"
             onClick={(e) => {
               e.stopPropagation()
               onNewFile()
             }}
-            className={`${iconBase} ${mutedColor} opacity-0 group-hover:opacity-100 focus:opacity-100`}
-            title="New file"
+            className={`${iconBase} ${hidden}`}
           >
-            <MdAdd className="w-full h-full" />
+            <TbPlus size={15} />
           </button>
           {showSort && (
             <button
               type="button"
               aria-label="Sort"
+              title="Sort"
               onClick={onOpenSortMenu}
               className={`${iconBase} ${
-                sortActive
-                  ? isSelected
-                    ? 'text-yellow-200 opacity-100'
-                    : 'text-primary opacity-100'
-                  : `${mutedColor} opacity-0 group-hover:opacity-100 focus:opacity-100`
+                sortActive ? 'text-accent-text opacity-100' : hidden
               }`}
-              title="Sort"
             >
-              <MdSort className="w-full h-full" />
+              <TbArrowsSort size={15} />
             </button>
           )}
         </>
@@ -64,11 +58,11 @@ export function RowActions({
       <button
         type="button"
         aria-label="Actions"
-        onClick={onOpenActionsMenu}
-        className={`${iconBase} ${mutedColor} opacity-0 group-hover:opacity-100 focus:opacity-100`}
         title="Actions"
+        onClick={onOpenActionsMenu}
+        className={`${iconBase} ${hidden}`}
       >
-        <MdMoreHoriz className="w-full h-full" />
+        <TbDots size={15} />
       </button>
     </span>
   )

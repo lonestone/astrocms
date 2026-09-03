@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { TbArrowLeft } from 'react-icons/tb'
 import Button from '../../common/components/Button.js'
+import { Dialog } from '../../common/components/Dialog.js'
+import { Field, Input } from '../../common/components/Input.js'
 import { LangPicker } from './LangPicker.js'
 
 export interface LangHint {
@@ -73,74 +76,26 @@ export function PromptDialog({
     handleSubmit(`${lang}${langHint!.ext}`)
   }
 
+  const pickingLang = mode === 'lang' && !!langHint
+
   return (
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/30"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onCancel()
-        }
-      }}
-    >
-      <div className="bg-white rounded-lg w-full max-w-sm p-5 shadow-2xl">
-        <h3 className="mb-3 text-sm font-semibold">{title}</h3>
-        {description && (
-          <p className="mb-3 text-xs text-text-muted">{description}</p>
-        )}
-
-        {mode === 'lang' && langHint ? (
-          <>
-            <LangPicker
-              usedLangs={langHint.usedLangs}
-              onSelect={handlePickLang}
-            />
-            <button
-              type="button"
-              onClick={() => setMode('name')}
-              className="mt-3 mb-1 text-xs text-primary hover:underline cursor-pointer"
+    <Dialog
+      title={title}
+      description={description}
+      onClose={onCancel}
+      width={pickingLang ? 'md' : 'sm'}
+      footer={
+        <>
+          {langHint && (
+            <Button
+              variant="ghost"
+              className="mr-auto"
+              icon={pickingLang ? undefined : <TbArrowLeft size={16} />}
+              onClick={() => setMode(pickingLang ? 'name' : 'lang')}
             >
-              Use a custom name instead
-            </button>
-          </>
-        ) : (
-          <>
-            <label className="block mb-2 text-xs text-gray-500">
-              {label}
-              <input
-                ref={inputRef}
-                type="text"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleSubmit()
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault()
-                    onCancel()
-                  }
-                }}
-                className="block w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-xs font-mono"
-              />
-            </label>
-            {langHint && (
-              <button
-                type="button"
-                onClick={() => setMode('lang')}
-                className="mb-4 text-xs text-primary hover:underline cursor-pointer"
-              >
-                &larr; Pick a language instead
-              </button>
-            )}
-          </>
-        )}
-
-        {error && <div className="mb-3 text-xs text-danger">{error}</div>}
-        <div className="flex justify-end gap-2 mt-3">
+              {pickingLang ? 'Use a custom name' : 'Pick a language'}
+            </Button>
+          )}
           <Button variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
@@ -150,11 +105,35 @@ export function PromptDialog({
               onClick={() => handleSubmit()}
               disabled={busy || !value.trim()}
             >
-              {busy ? '...' : confirmLabel}
+              {busy ? 'Working' : confirmLabel}
             </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {pickingLang ? (
+        <LangPicker usedLangs={langHint!.usedLangs} onSelect={handlePickLang} />
+      ) : (
+        <Field label={label ?? 'Name'} htmlFor="prompt-value" error={error}>
+          <Input
+            id="prompt-value"
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleSubmit()
+              }
+            }}
+            className="font-mono text-xs"
+          />
+        </Field>
+      )}
+      {pickingLang && error && (
+        <p className="mt-3 text-xs text-danger-text">{error}</p>
+      )}
+    </Dialog>
   )
 }

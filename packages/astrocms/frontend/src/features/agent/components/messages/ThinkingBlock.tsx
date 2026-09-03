@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { TbBrain } from 'react-icons/tb'
 import { Arrow } from './Arrow.js'
 
 interface Props {
@@ -10,18 +11,19 @@ export function ThinkingBlock({ text }: Props) {
   if (!text) return null
 
   return (
-    <div className="mb-3">
+    <div className="mb-2">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text cursor-pointer"
-        aria-label={open ? 'Collapse thinking' : 'Expand thinking'}
-        tabIndex={0}
+        className="flex items-center gap-1 rounded-md px-1 py-0.5 text-xs text-text-muted cursor-pointer transition-colors hover:text-text"
+        aria-expanded={open}
       >
         <Arrow open={open} />
-        Thinking...
+        <TbBrain size={14} />
+        Thinking
       </button>
       {open && (
-        <div className="mt-1 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto">
+        <div className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-inset px-3 py-2 text-xs italic leading-relaxed text-text-secondary">
           {text}
         </div>
       )}

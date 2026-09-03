@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
+import { TbShieldQuestion } from 'react-icons/tb'
 import type { PendingPermission } from '../../../api.js'
 import { respondToPermission } from '../../../api.js'
+import Button from '../../common/components/Button.js'
 
 interface Props {
   permission: PendingPermission
@@ -39,44 +41,40 @@ export function PermissionRequest({ permission, onResolved }: Props) {
   const inputDetails = formatInput(permission.toolName, permission.input)
 
   return (
-    <div className="mx-3 mb-3 rounded-md border border-amber-300 bg-amber-50 overflow-hidden">
-      <div className="px-3 py-2 flex items-start gap-2">
-        <span className="text-amber-600 text-sm mt-0.5">&#9888;</span>
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold text-amber-900">
+    <div className="mb-3 overflow-hidden rounded-panel border border-warning/40 bg-surface-raised animate-pop-in">
+      <div className="flex items-start gap-2 bg-warning-soft px-3 py-2">
+        <TbShieldQuestion size={16} className="mt-0.5 shrink-0 text-warning-text" />
+        <div className="min-w-0 flex-1">
+          <div className="text-ui font-semibold text-warning-text">
             {summary}
           </div>
           {permission.decisionReason && (
-            <div className="text-[10px] text-amber-700 mt-0.5">
+            <div className="mt-0.5 text-xs text-text-secondary">
               {permission.decisionReason}
             </div>
           )}
-          {inputDetails && (
-            <pre className="mt-1.5 px-2 py-1.5 rounded bg-amber-100 text-[10px] font-mono text-amber-900 whitespace-pre-wrap break-words max-h-32 overflow-auto">
-              {inputDetails}
-            </pre>
-          )}
         </div>
       </div>
-      <div className="px-3 py-2 border-t border-amber-200 flex gap-2">
-        <button
+      {inputDetails && (
+        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words border-t border-border bg-surface-inset px-3 py-2 font-mono text-xs text-text-secondary">
+          {inputDetails}
+        </pre>
+      )}
+      <div className="flex gap-2 border-t border-border bg-surface px-3 py-2">
+        <Button
+          variant="primary"
           onClick={() => handleRespond('allow')}
           disabled={responding}
-          className="px-3 py-1 text-[11px] font-semibold rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer"
-          aria-label="Allow tool"
-          tabIndex={0}
         >
           Allow
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => handleRespond('deny')}
           disabled={responding}
-          className="px-3 py-1 text-[11px] font-semibold rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
-          aria-label="Deny tool"
-          tabIndex={0}
         >
           Deny
-        </button>
+        </Button>
       </div>
     </div>
   )

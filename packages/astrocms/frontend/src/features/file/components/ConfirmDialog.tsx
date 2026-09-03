@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Button from '../../common/components/Button.js'
+import { Dialog } from '../../common/components/Dialog.js'
 
 interface Props {
   title: string
@@ -33,17 +34,11 @@ export function ConfirmDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/30"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
-    >
-      <div className="bg-white rounded-lg w-full max-w-sm p-5 shadow-2xl">
-        <h3 className="mb-3 text-sm font-semibold">{title}</h3>
-        <p className="mb-4 text-xs text-text">{message}</p>
-        {error && <div className="mb-3 text-xs text-danger">{error}</div>}
-        <div className="flex justify-end gap-2">
+    <Dialog
+      title={title}
+      onClose={onCancel}
+      footer={
+        <>
           <Button variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
@@ -51,11 +46,15 @@ export function ConfirmDialog({
             variant={confirmVariant}
             onClick={handleConfirm}
             disabled={busy}
+            autoFocus
           >
-            {busy ? '...' : confirmLabel}
+            {busy ? 'Working' : confirmLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="text-ui leading-relaxed text-text-secondary">{message}</p>
+      {error && <p className="mt-3 text-xs text-danger-text">{error}</p>}
+    </Dialog>
   )
 }

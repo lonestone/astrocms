@@ -46,7 +46,7 @@ export function InlineRenameInput({ initialValue, onSubmit, onCancel }: Props) {
       }}
       onBlur={commit}
       style={{ font: 'inherit', lineHeight: 'inherit' }}
-      className="flex-1 min-w-0 m-0 p-0 border-0 bg-white text-text rounded-sm outline outline-1 outline-primary"
+      className="m-0 min-w-0 flex-1 rounded-sm border-0 bg-surface-raised px-1 -mx-1 text-xs text-text outline-none ring-2 ring-accent"
     />
   )
 }

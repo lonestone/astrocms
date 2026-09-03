@@ -11,6 +11,8 @@ import { useFilePath } from '../contexts/FilePathContext.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
 import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import Button from '../../common/components/Button.js'
+import { Dialog } from '../../common/components/Dialog.js'
+import { Field, Input } from '../../common/components/Input.js'
 
 export function CustomImageDialog() {
   const state = useCellValue(imageDialogState$)
@@ -63,71 +65,70 @@ export function CustomImageDialog() {
 
   if (!isActive) return null
 
-  // Resolve preview URL
   const previewSrc = resolvePreviewSrc(src, filePath, config)
 
   return (
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/30"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleCancel()
-      }}
-    >
-      <div className="bg-white rounded-lg w-full max-w-md p-5 shadow-2xl">
-        <h3 className="mb-4 text-sm font-semibold">
-          {isEditing ? 'Edit image' : 'Insert image'}
-        </h3>
-
-        {/* Preview */}
-        {previewSrc && (
-          <div className="mb-3 bg-bg rounded p-2 text-center">
-            <img
-              src={previewSrc}
-              alt=""
-              className="max-h-30 max-w-full object-contain"
-            />
-          </div>
-        )}
-
-        {/* Source */}
-        <label className="block mb-2 text-xs text-gray-500">
-          Source
-          <div className="flex gap-1.5 mt-1">
-            <input
-              type="text"
-              value={src}
-              onChange={(e) => setSrc(e.target.value)}
-              placeholder="./image.png"
-              className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs font-mono"
-            />
-            <Button variant="primary" size="sm" onClick={handleSelectMedia}>
-              Select
-            </Button>
-          </div>
-        </label>
-
-        {/* Alt text */}
-        <label className="block mb-4 text-xs text-gray-500">
-          Alt text
-          <input
-            type="text"
-            value={alt}
-            onChange={(e) => setAlt(e.target.value)}
-            placeholder="Describe the image"
-            className="block w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-xs"
-          />
-        </label>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-2">
+    <Dialog
+      title={isEditing ? 'Edit image' : 'Insert image'}
+      onClose={handleCancel}
+      width="md"
+      footer={
+        <>
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSave} disabled={!src}>
             {isEditing ? 'Save' : 'Insert'}
           </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex h-36 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-inset">
+          {previewSrc ? (
+            <img
+              src={previewSrc}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <span className="text-xs text-text-faint">
+              Pick a file to preview it here
+            </span>
+          )}
         </div>
+
+        <Field label="Source" htmlFor="image-src">
+          <div className="flex gap-1.5">
+            <Input
+              id="image-src"
+              type="text"
+              value={src}
+              onChange={(e) => setSrc(e.target.value)}
+              placeholder="./image.png"
+              className="font-mono text-xs"
+              autoFocus
+            />
+            <Button onClick={handleSelectMedia} className="h-auto shrink-0">
+              Browse
+            </Button>
+          </div>
+        </Field>
+
+        <Field
+          label="Alt text"
+          htmlFor="image-alt"
+          hint="Describes the image for screen readers and search engines."
+        >
+          <Input
+            id="image-alt"
+            type="text"
+            value={alt}
+            onChange={(e) => setAlt(e.target.value)}
+            placeholder="A short description"
+          />
+        </Field>
       </div>
-    </div>
+    </Dialog>
   )
 }

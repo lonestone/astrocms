@@ -14,7 +14,7 @@ interface Props<K extends string> {
 
 export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>) {
   return (
-    <div role="tablist" className="flex gap-1 border-b border-border px-4">
+    <div role="tablist" className="flex gap-4 border-b border-border px-5">
       {tabs.map((tab) => {
         const selected = tab.key === active
         return (
@@ -25,10 +25,10 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>) {
             aria-selected={selected}
             title={tab.title}
             onClick={() => onSelect(tab.key)}
-            className={`-mb-px px-3 py-2 text-sm border-b-2 cursor-pointer bg-transparent ${
+            className={`-mb-px border-b-2 py-2.5 text-ui font-medium cursor-pointer transition-colors duration-150 ${
               selected
-                ? 'border-primary text-primary font-medium'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-accent text-text'
+                : 'border-transparent text-text-muted hover:text-text'
             }`}
           >
             {tab.label}

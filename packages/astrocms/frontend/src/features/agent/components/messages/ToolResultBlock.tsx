@@ -13,26 +13,26 @@ export function ToolResultBlock({ content, isError }: Props) {
   if (!text) return null
 
   return (
-    <div className="mb-3">
+    <div className="mb-2">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1 text-[10px] cursor-pointer ${
+        className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-xs cursor-pointer transition-colors ${
           isError
-            ? 'text-red-600 hover:text-red-800'
+            ? 'text-danger-text hover:bg-danger-soft'
             : 'text-text-muted hover:text-text'
         }`}
-        aria-label={open ? 'Collapse result' : 'Expand result'}
-        tabIndex={0}
+        aria-expanded={open}
       >
         <Arrow open={open} />
         {isError ? 'Error' : 'Result'}
       </button>
       {open && (
         <div
-          className={`mt-1 px-3 py-2 rounded-md text-[10px] font-mono whitespace-pre-wrap break-words max-h-48 overflow-auto ${
+          className={`mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border px-3 py-2 font-mono text-xs ${
             isError
-              ? 'bg-red-50 border border-red-200 text-red-800'
-              : 'bg-gray-50 border border-gray-200 text-text'
+              ? 'border-danger/40 bg-danger-soft text-danger-text'
+              : 'border-border bg-surface-inset text-text-secondary'
           }`}
         >
           {text}

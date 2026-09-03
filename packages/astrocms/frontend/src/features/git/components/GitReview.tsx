@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
-import { FiRefreshCw } from 'react-icons/fi'
-import { RiSparkling2Line } from 'react-icons/ri'
+import { TbGitCommit, TbRefresh, TbSparkles } from 'react-icons/tb'
 import { useQueryClient } from '@tanstack/react-query'
 import Button from '../../common/components/Button.js'
-import { Tooltip } from '../../common/components/Tooltip.js'
+import { IconButton } from '../../common/components/IconButton.js'
+import { inputClass } from '../../common/components/Input.js'
 import { useAgentRuntime } from '../../agent/contexts/AgentRuntimeContext.js'
 import {
   useGitCommit,
@@ -30,6 +30,7 @@ export function GitReview() {
   const stagedCount = staged.length
   const canCommit = message.trim().length > 0 && stagedCount > 0
   const allStaged = files.length > 0 && files.every((f) => f.staged)
+  const someStaged = stagedCount > 0 && !allStaged
 
   function handleToggleAll() {
     if (allStaged) {
@@ -67,82 +68,109 @@ export function GitReview() {
     sendInNewConversation(prompt)
   }
 
+  const canAutoPublish = isAuthenticated && stagedCount > 0
+
   return (
-    <div className="flex flex-col h-full relative">
-      <div className="flex-1 overflow-auto px-6 pt-6 pb-40">
-        <div className="pb-3 flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Review changes</h1>
-          <span className="text-xs text-text-muted">
-            {files.length} file{files.length === 1 ? '' : 's'} changed
-            {stagedCount > 0 && ` · ${stagedCount} staged`}
-          </span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="p-1.5 rounded text-text-muted hover:text-text hover:bg-gray-100 cursor-pointer"
-            aria-label="Refresh"
-            tabIndex={0}
-          >
-            <FiRefreshCw size={14} />
-          </button>
+    <div className="relative flex h-full flex-col">
+      <div className="flex-1 overflow-auto px-6 pt-5 pb-44">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg font-semibold tracking-tight">
+                Review changes
+              </h1>
+              <p className="text-xs text-text-muted">
+                {isLoading
+                  ? 'Checking the working tree'
+                  : files.length === 0
+                    ? 'Everything is published.'
+                    : `${files.length} file${files.length === 1 ? '' : 's'} changed, ${stagedCount} selected to publish`}
+              </p>
+            </div>
+            {files.length > 0 && (
+              <label className="flex h-8 cursor-pointer select-none items-center gap-2 rounded-md border border-border bg-surface-raised px-3 text-ui font-medium text-text transition-colors hover:bg-surface-hover">
+                <input
+                  type="checkbox"
+                  checked={allStaged}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someStaged
+                  }}
+                  onChange={handleToggleAll}
+                  className="h-3.5 w-3.5 accent-accent"
+                />
+                Select all
+              </label>
+            )}
+            <IconButton label="Refresh" onClick={handleRefresh}>
+              <TbRefresh size={16} />
+            </IconButton>
+          </div>
+
+          {isLoading ? (
+            <div className="flex flex-col gap-4" aria-busy="true">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="overflow-hidden rounded-panel border border-border bg-surface-raised"
+                >
+                  <div className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2.5">
+                    <span className="skeleton h-3.5 w-3.5" />
+                    <span className="skeleton h-4 w-16 rounded-full" />
+                    <span className="skeleton h-3 w-48" />
+                  </div>
+                  <div className="flex flex-col gap-2 px-4 py-3">
+                    <span className="skeleton h-3 w-3/4" />
+                    <span className="skeleton h-3 w-1/2" />
+                    <span className="skeleton h-3 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : files.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-panel border border-dashed border-border-strong py-16 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-panel bg-success-soft text-success-text">
+                <TbGitCommit size={20} />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-text">
+                  Working tree is clean
+                </p>
+                <p className="text-xs text-text-muted">
+                  Edits you make will show up here, ready to publish.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {files.map((file) => (
+                <GitReviewFile
+                  key={file.path}
+                  file={file}
+                  diff={diffs[file.path] ?? ''}
+                />
+              ))}
+            </div>
+          )}
         </div>
-
-        {files.length > 0 && (
-          <div className="pb-4">
-            <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allStaged}
-                onChange={handleToggleAll}
-                className="accent-primary w-4 h-4"
-              />
-              Include all
-            </label>
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="text-xs text-text-muted py-10 text-center">
-            Loading...
-          </div>
-        ) : files.length === 0 ? (
-          <div className="text-sm text-text-muted py-16 text-center">
-            Working tree is clean.
-            <br />
-            Nothing to commit.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {files.map((file) => (
-              <GitReviewFile
-                key={file.path}
-                file={file}
-                diff={diffs[file.path] ?? ''}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       {files.length > 0 && (
-        <div className="absolute left-0 right-0 bottom-0 z-20 border-t border-border bg-white px-6 py-3 shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]">
-          <div className="flex flex-col gap-3 max-w-5xl mx-auto">
-            {isAuthenticated && stagedCount > 0 && (
-              <Tooltip content="Agent will generate a commit message and push">
-                <button
-                  type="button"
-                  onClick={handleAutoCommit}
-                  disabled={isRunning}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-primary text-white shadow-md enabled:hover:opacity-95 enabled:cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                  tabIndex={0}
-                >
-                  <RiSparkling2Line size={16} />
-                  <span className="font-semibold text-sm">
-                    {isRunning ? 'AI is working...' : `Publish (${stagedCount})`}
-                  </span>
-                </button>
-              </Tooltip>
+        <div className="absolute inset-x-0 bottom-0 z-20 border-t border-border bg-surface-raised px-6 py-3 shadow-bar">
+          <div className="mx-auto flex max-w-5xl flex-col gap-2">
+            {canAutoPublish && (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={handleAutoCommit}
+                disabled={isRunning}
+                icon={<TbSparkles size={16} />}
+                title="The agent writes the commit message and pushes"
+                className="w-full"
+              >
+                {isRunning
+                  ? 'Agent is publishing'
+                  : `Publish ${stagedCount} file${stagedCount === 1 ? '' : 's'} with the agent`}
+              </Button>
             )}
             <div className="flex gap-2">
               <input
@@ -155,24 +183,30 @@ export function GitReview() {
                   }
                 }}
                 placeholder={
-                  isAuthenticated && stagedCount > 0
-                    ? 'or enter manual commit message...'
-                    : 'Enter commit message...'
+                  canAutoPublish
+                    ? 'Or write your own commit message'
+                    : stagedCount === 0
+                      ? 'Select at least one file to publish'
+                      : 'Commit message'
                 }
-                className="flex-1 px-3 py-2 border border-border rounded-md text-sm outline-none focus:border-primary"
+                aria-label="Commit message"
+                className={inputClass}
               />
-              <Tooltip content="Commit & push">
-                <Button
-                  variant="success"
-                  onClick={() => handleCommit(true)}
-                  disabled={!canCommit || commit.isPending}
-                >
-                  {commit.isPending ? '...' : `Publish (${stagedCount})`}
-                </Button>
-              </Tooltip>
+              <Button
+                variant={canAutoPublish ? 'outline' : 'primary'}
+                size="lg"
+                onClick={() => handleCommit(true)}
+                disabled={!canCommit || commit.isPending}
+                title="Commit and push"
+                className="shrink-0"
+              >
+                {commit.isPending ? 'Publishing' : 'Publish'}
+              </Button>
             </div>
             {commit.error && (
-              <div className="text-xs text-danger">{commit.error.message}</div>
+              <div className="text-xs text-danger-text">
+                {commit.error.message}
+              </div>
             )}
           </div>
         </div>

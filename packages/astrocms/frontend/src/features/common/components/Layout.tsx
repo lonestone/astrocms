@@ -26,8 +26,8 @@ export function Layout() {
 
   const isGitRoute = location.pathname.startsWith('/git')
   const mainClass = isGitRoute
-    ? 'flex-1 overflow-hidden bg-bg-main flex flex-col'
-    : 'flex-1 overflow-auto p-4 bg-bg-main'
+    ? 'flex min-w-0 flex-1 flex-col overflow-hidden bg-bg'
+    : 'min-w-0 flex-1 overflow-auto bg-bg p-4'
 
   return (
     <AgentRuntimeProvider onRequestOpen={openAgent}>
@@ -41,10 +41,7 @@ export function Layout() {
           <div className="flex flex-1 overflow-hidden">
             <Sidebar onSelectFile={handleSelectFile} />
             <main className={mainClass}>
-              <AppRoutes
-                filePath={filePath}
-                onSelectFile={handleSelectFile}
-              />
+              <AppRoutes filePath={filePath} onSelectFile={handleSelectFile} />
             </main>
             <AgentPanel open={agentOpen} />
           </div>

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { TbRocket } from 'react-icons/tb'
 import { fetchAuthStatus, login, onAuthRequired } from '../../../api.js'
 import Button from '../../common/components/Button.js'
+import { Field, Input } from '../../common/components/Input.js'
 
 type Status = 'loading' | 'gated' | 'ok'
 
@@ -46,39 +48,47 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center text-text-muted">
-        Chargement…
+      <div className="flex h-screen items-center justify-center bg-bg">
+        <div className="flex items-center gap-2 text-xs text-text-muted">
+          <span className="skeleton h-2 w-24" />
+        </div>
       </div>
     )
   }
 
   if (status === 'gated') {
     return (
-      <div className="flex h-screen items-center justify-center bg-bg-main">
+      <div className="flex h-screen items-center justify-center bg-bg p-4">
         <form
           onSubmit={handleSubmit}
-          className="flex w-80 flex-col gap-3 rounded-md border border-border bg-white p-6 shadow-sm"
+          className="flex w-full max-w-xs flex-col gap-5 rounded-panel border border-border bg-surface-raised p-6 shadow-dialog"
         >
-          <h1 className="text-lg font-semibold">AstroCMS</h1>
-          <label htmlFor="astrocms-password" className="text-sm text-text-muted">
-            Mot de passe
-          </label>
-          <input
-            id="astrocms-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoFocus
-            autoComplete="current-password"
-            className="rounded-md border border-border bg-white px-2 py-1 text-sm outline-none focus:border-primary"
-          />
-          {error && <p className="text-sm text-danger">{error}</p>}
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-accent-fg">
+              <TbRocket size={18} />
+            </span>
+            <div>
+              <h1 className="text-sm font-semibold leading-tight">AstroCMS</h1>
+              <p className="text-xs text-text-muted">Sign in to continue</p>
+            </div>
+          </div>
+          <Field label="Password" htmlFor="astrocms-password" error={error}>
+            <Input
+              id="astrocms-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              autoComplete="current-password"
+            />
+          </Field>
           <Button
             type="submit"
             variant="primary"
+            size="lg"
             disabled={submitting || !password}
           >
-            {submitting ? '…' : 'Se connecter'}
+            {submitting ? 'Signing in' : 'Sign in'}
           </Button>
         </form>
       </div>

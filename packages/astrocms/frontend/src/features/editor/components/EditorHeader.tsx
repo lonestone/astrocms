@@ -1,7 +1,8 @@
 import React from 'react'
 import { useNavigate } from 'react-router'
-import { MdMoreHoriz, MdAdd } from 'react-icons/md'
+import { TbCheck, TbDots, TbLoader2, TbPlus } from 'react-icons/tb'
 import LangButton from '../../common/components/LangButton.js'
+import { IconButton } from '../../common/components/IconButton.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { stripExtension } from '../../common/utils/supportedFiles.js'
 import { parentOf } from '../../common/utils/paths.js'
@@ -103,63 +104,65 @@ export default function EditorHeader({
     })
   }
 
+  const segments = pathToShow.split('/')
+  const lastIndex = segments.length - 1
+  const missingSegments = missingPart
+    ? missingPart.startsWith('/')
+      ? missingPart.slice(1).split('/')
+      : [missingPart]
+    : []
+
   return (
-    <div className="flex items-stretch">
+    <div className="mb-3 flex min-h-9 items-center gap-3">
       <div
-        className="group relative flex items-center gap-1 text-xl font-bold py-2 pl-3 shrink-0 whitespace-nowrap"
+        className="group flex min-w-0 flex-1 items-center gap-1"
         onContextMenu={(e) => {
           e.preventDefault()
           openSelfMenu(e.clientX, e.clientY)
         }}
       >
-        <span>
-          {pathToShow.split('/').map((part, i) => (
-            <span key={i}>
+        <h1 className="flex min-w-0 items-baseline truncate text-lg font-semibold tracking-tight">
+          {segments.map((part, i) => (
+            <span key={i} className="flex min-w-0 items-baseline">
               {i > 0 && (
-                <span className="text-text-muted/40 font-normal mx-2">/</span>
+                <span className="mx-1.5 font-normal text-text-faint">/</span>
               )}
-              {part}
+              <span
+                className={
+                  i === lastIndex
+                    ? 'truncate text-text'
+                    : 'truncate font-normal text-text-muted'
+                }
+              >
+                {part}
+              </span>
             </span>
           ))}
-          {missingPart &&
-            (missingPart.startsWith('/') ? (
-              missingPart
-                .slice(1)
-                .split('/')
-                .map((part, i) => (
-                  <span
-                    key={`m${i}`}
-                    className="text-text-muted/40 font-normal"
-                  >
-                    <span className="mx-2">/</span>
-                    {part}
-                  </span>
-                ))
-            ) : (
-              <span className="text-text-muted/40 font-normal">
-                {missingPart}
-              </span>
-            ))}
-        </span>
-        <button
-          type="button"
-          aria-label="Actions"
-          title="Actions"
+          {missingSegments.map((part, i) => (
+            <span key={`m${i}`} className="flex items-baseline">
+              {(missingPart.startsWith('/') || i > 0) && (
+                <span className="mx-1.5 font-normal text-text-faint">/</span>
+              )}
+              <span className="font-normal text-text-faint">{part}</span>
+            </span>
+          ))}
+        </h1>
+        <IconButton
+          label="File actions"
           onClick={(e) => {
             e.stopPropagation()
-            const rect = (
-              e.currentTarget as HTMLElement
-            ).getBoundingClientRect()
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
             openSelfMenu(rect.right, rect.bottom)
           }}
-          className="ml-1 w-6 h-6 rounded text-text-muted hover:bg-border opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center justify-center cursor-pointer"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         >
-          <MdMoreHoriz className="w-5 h-5" />
-        </button>
+          <TbDots size={18} />
+        </IconButton>
       </div>
-      <div className="flex-1 min-w-0 overflow-x-auto pb-px">
-        {localeSiblings && localeSiblings.length > 1 && (
-          <div className="ml-1 flex h-full items-stretch gap-1">
+
+      {localeSiblings && localeSiblings.length > 1 && (
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="flex items-center gap-0.5 rounded-md bg-surface-active/70 p-0.5">
             {localeSiblings.map((s) => (
               <span
                 key={s.lang}
@@ -176,29 +179,57 @@ export default function EditorHeader({
                 />
               </span>
             ))}
-            <button
-              type="button"
-              aria-label="New file in this folder"
-              title="New file in this folder"
-              onClick={openCreateInCurrentFolder}
-              className="self-center ml-1 w-6 h-6 rounded text-text-muted hover:bg-border flex items-center justify-center cursor-pointer"
-            >
-              <MdAdd className="w-5 h-5" />
-            </button>
           </div>
-        )}
-      </div>
-      <div className="shrink-0 pl-2 pr-3 flex items-center">
-        {(isDirty || isSaving) && (
-          <span
-            className={`block w-1.5 h-1.5 rounded-full bg-blue-500 ${
-              isSaving ? 'animate-pulse' : ''
-            }`}
-            aria-label={isSaving ? 'Saving' : 'Unsaved changes'}
-            title={isSaving ? 'Saving...' : 'Unsaved changes'}
-          />
-        )}
-      </div>
+          <IconButton
+            label="Add a translation"
+            onClick={openCreateInCurrentFolder}
+          >
+            <TbPlus size={16} />
+          </IconButton>
+        </div>
+      )}
+
+      <SaveStatus isDirty={isDirty} isSaving={isSaving} />
     </div>
+  )
+}
+
+function SaveStatus({
+  isDirty,
+  isSaving,
+}: {
+  isDirty: boolean
+  isSaving: boolean
+}) {
+  if (isSaving) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-1 text-xs text-text-muted"
+        aria-live="polite"
+      >
+        <TbLoader2 size={14} className="animate-spin" />
+        Saving
+      </span>
+    )
+  }
+  if (isDirty) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-1 text-xs text-warning-text"
+        aria-live="polite"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
+        Unsaved
+      </span>
+    )
+  }
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 text-xs text-text-faint"
+      aria-live="polite"
+    >
+      <TbCheck size={14} />
+      Saved
+    </span>
   )
 }

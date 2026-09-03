@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { RiSendPlane2Fill, RiSparkling2Line } from 'react-icons/ri'
+import { TbArrowUp, TbSparkles } from 'react-icons/tb'
 import { useAgentRuntime } from '../../agent/contexts/AgentRuntimeContext.js'
 
 export function HeaderAgentPrompt() {
@@ -37,31 +37,35 @@ export function HeaderAgentPrompt() {
           tabIndex={-1}
           aria-label="Close prompt"
           onClick={() => inputRef.current?.blur()}
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 cursor-default"
+          className="fixed inset-0 z-30 cursor-default bg-overlay animate-fade-in"
         />
       )}
       <div
         className={
           focused
-            ? 'pointer-events-auto fixed inset-x-0 mx-auto top-16 w-[min(720px,calc(100%-2rem))] z-40 shadow-2xl animate-header-prompt-in'
+            ? 'pointer-events-auto fixed inset-x-0 top-16 z-40 mx-auto w-[min(680px,calc(100%-2rem))] animate-pop-in'
             : 'pointer-events-auto relative w-full max-w-md'
         }
       >
         <div
-          className={`rounded-xl border bg-white transition-colors ${
+          className={`rounded-panel border bg-surface-raised transition-colors duration-150 ${
             focused
-              ? 'border-primary ring-4 ring-primary/15'
-              : 'border-border hover:border-gray-400'
+              ? 'border-accent shadow-dialog ring-2 ring-ring'
+              : 'border-border hover:border-border-strong'
           }`}
         >
           <label
-            className={`flex items-start gap-2 cursor-text ${
+            className={`flex cursor-text items-start gap-2 ${
               focused ? 'px-4 py-3' : 'px-3 py-1.5'
             }`}
           >
-            <div className="shrink-0 h-5 flex items-center text-primary">
-              <RiSparkling2Line size={focused ? 16 : 14} />
-            </div>
+            <span
+              className={`flex h-6 shrink-0 items-center ${
+                focused ? 'text-accent-text' : 'text-text-muted'
+              }`}
+            >
+              <TbSparkles size={16} />
+            </span>
             <textarea
               ref={inputRef}
               value={value}
@@ -74,10 +78,14 @@ export function HeaderAgentPrompt() {
                   handleSubmit()
                 }
               }}
-              placeholder={focused ? 'Ask AI to help with anything...' : 'Ask AI...'}
+              placeholder={
+                focused
+                  ? 'Describe what you want to change or create'
+                  : 'Ask the agent'
+              }
               rows={focused ? 3 : 1}
-              className={`flex-1 resize-none outline-none bg-transparent text-sm leading-5 placeholder:text-text-muted ${
-                focused ? '' : 'h-5 overflow-hidden'
+              className={`flex-1 resize-none bg-transparent text-base leading-6 text-text outline-none placeholder:text-text-faint ${
+                focused ? '' : 'h-6 overflow-hidden'
               }`}
             />
             {focused && (
@@ -89,16 +97,23 @@ export function HeaderAgentPrompt() {
                 }}
                 disabled={!value.trim()}
                 aria-label="Send to agent"
-                tabIndex={0}
-                className="shrink-0 p-2 rounded-lg bg-primary text-white enabled:hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default cursor-pointer"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg transition-colors enabled:hover:bg-accent-hover enabled:cursor-pointer disabled:opacity-40"
               >
-                <RiSendPlane2Fill size={14} />
+                <TbArrowUp size={16} />
               </button>
             )}
           </label>
           {focused && (
-            <div className="px-4 pb-2 text-[10px] text-text-muted text-center">
-              Enter to send, Shift+Enter for new line, Esc to close
+            <div className="flex items-center gap-3 border-t border-border px-4 py-1.5 text-xs text-text-muted">
+              <span>
+                <kbd className="font-sans">Enter</kbd> to send
+              </span>
+              <span>
+                <kbd className="font-sans">Shift + Enter</kbd> for a new line
+              </span>
+              <span className="ml-auto">
+                <kbd className="font-sans">Esc</kbd> to close
+              </span>
             </div>
           )}
         </div>

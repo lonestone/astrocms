@@ -1,5 +1,8 @@
 import React, { useMemo, useCallback } from 'react'
 import type { PropSchema } from '../../../api.js'
+import { TbPlus, TbX } from 'react-icons/tb'
+import Button from '../../common/components/Button.js'
+import { IconButton } from '../../common/components/IconButton.js'
 import { inputClassName } from './PropInput.js'
 
 // Parse JS expression (unquoted keys) or JSON into an array
@@ -70,13 +73,13 @@ export default function JsonTableEditor({ value, schema, onChange }: Props) {
 
   return (
     <div className="py-1">
-      <table className="w-full border-collapse m-0! text-xs font-mono">
+      <table className="w-full border-collapse m-0! text-ui">
         <thead>
           <tr>
             {schema.map((s) => (
               <th
                 key={s.name}
-                className="text-left px-1 py-0.5 border-b border-gray-300 text-gray-400 font-medium"
+                className="border-b border-border px-1 py-1 text-left text-xs font-medium text-text-muted"
               >
                 {s.name}
               </th>
@@ -101,24 +104,28 @@ export default function JsonTableEditor({ value, schema, onChange }: Props) {
                 </td>
               ))}
               <td className="py-0.5">
-                <button
+                <IconButton
+                  label="Remove row"
+                  size="sm"
+                  tone="danger"
                   onClick={() => handleRemoveRow(rowIndex)}
-                  title="Remove row"
-                  className="bg-transparent border-none cursor-pointer text-gray-300 text-sm leading-none px-0.5 hover:text-gray-500"
                 >
-                  ×
-                </button>
+                  <TbX size={14} />
+                </IconButton>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button
+      <Button
+        variant="dashed"
+        size="sm"
+        icon={<TbPlus size={14} />}
         onClick={handleAddRow}
-        className="mt-1 bg-transparent border border-dashed border-gray-300 rounded-sm cursor-pointer text-gray-400 text-2xs px-2 py-px hover:border-gray-400 hover:text-gray-600"
+        className="mt-1.5"
       >
-        + Add row
-      </button>
+        Add row
+      </Button>
     </div>
   )
 }

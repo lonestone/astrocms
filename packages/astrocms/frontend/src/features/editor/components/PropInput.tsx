@@ -1,18 +1,21 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react'
+import { TbPlus, TbX } from 'react-icons/tb'
 import type { PropSchema } from '../../../api.js'
 import { useMediaModal } from '../../file/components/MediaModal.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
 import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import Button from '../../common/components/Button.js'
+import { IconButton } from '../../common/components/IconButton.js'
+import { inputClass } from '../../common/components/Input.js'
 
-export const inputClassName =
-  'px-1.5 py-1 border border-gray-300 rounded-sm text-xs font-mono bg-white text-gray-900 flex-1 min-w-0'
+export const inputClassName = inputClass
 
 export const labelClassName =
-  'flex items-start gap-1 text-gray-400 select-none text-xs'
+  'flex items-start gap-3 text-ui text-text-secondary select-none'
 
-const labelTextClassName = 'min-w-25 shrink-0 pt-0.5'
+const labelTextClassName =
+  'w-36 shrink-0 truncate pt-2 text-ui font-medium leading-5 text-text-muted'
 
 /**
  * Input that keeps local state and only calls onChange on blur or Enter.
@@ -107,7 +110,16 @@ export function ImagePropInput({
   return (
     <label className={labelClassName}>
       <span className={labelTextClassName}>{formatLabel(name)}</span>
-      <span className="flex items-center gap-1 flex-1 min-w-0">
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        {previewSrc && (
+          <span className="flex h-9 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-inset">
+            <img
+              src={previewSrc}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+            />
+          </span>
+        )}
         <DeferredInput
           type="text"
           value={value}
@@ -115,15 +127,10 @@ export function ImagePropInput({
           className={inputClassName}
           placeholder="./image.png"
         />
-        <Button onClick={handleSelect}>Select</Button>
+        <Button size="md" onClick={handleSelect}>
+          Browse
+        </Button>
       </span>
-      {previewSrc && (
-        <img
-          src={previewSrc}
-          alt=""
-          className="max-h-8 max-w-20 object-contain ml-1"
-        />
-      )}
     </label>
   )
 }
@@ -144,7 +151,7 @@ function StringArrayInput({
   return (
     <div className={labelClassName}>
       <span className={labelTextClassName}>{formatLabel(name)}</span>
-      <div className="flex-1 flex flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-1">
             <DeferredInput
@@ -157,22 +164,25 @@ function StringArrayInput({
               }}
               className={inputClassName}
             />
-            <button
-              type="button"
+            <IconButton
+              label="Remove"
+              size="sm"
+              tone="danger"
               onClick={() => onChangeItems(items.filter((_, j) => j !== i))}
-              className="bg-transparent border-none cursor-pointer text-gray-300 text-sm leading-none px-0.5 hover:text-gray-500"
             >
-              ×
-            </button>
+              <TbX size={14} />
+            </IconButton>
           </div>
         ))}
-        <button
-          type="button"
+        <Button
+          variant="dashed"
+          size="sm"
+          icon={<TbPlus size={14} />}
           onClick={() => onChangeItems([...items, ''])}
-          className="self-start bg-transparent border border-dashed border-gray-300 rounded-sm cursor-pointer text-gray-400 text-2xs px-2 py-px hover:border-gray-400 hover:text-gray-600"
+          className="self-start"
         >
-          + Add
-        </button>
+          Add
+        </Button>
       </div>
     </div>
   )
@@ -209,7 +219,7 @@ export function PropInput({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`${inputClassName} py-0.5 px-1`}
+          className={`${inputClassName} max-w-xs`}
         >
           <option value=""></option>
           {schema.options.map((opt) => (
@@ -232,11 +242,14 @@ export function PropInput({
     return (
       <label className={`${labelClassName} cursor-pointer`}>
         <span className={labelTextClassName}>{formatLabel(name)}</span>
-        <input
-          type="checkbox"
-          checked={value === 'true'}
-          onChange={(e) => onChange(e.target.checked ? 'true' : '')}
-        />
+        <span className="flex h-9 items-center">
+          <input
+            type="checkbox"
+            checked={value === 'true'}
+            onChange={(e) => onChange(e.target.checked ? 'true' : '')}
+            className="h-4 w-4 cursor-pointer rounded accent-accent"
+          />
+        </span>
       </label>
     )
   }
@@ -250,7 +263,7 @@ export function PropInput({
           type="number"
           value={value}
           onChange={onChange}
-          className={`${inputClassName} max-w-20`}
+          className={`${inputClassName} max-w-28`}
         />
       </label>
     )
@@ -265,7 +278,7 @@ export function PropInput({
           type="date"
           value={toDateInputValue(value)}
           onChange={(e) => onChange(e.target.value)}
-          className={`${inputClassName} max-w-40`}
+          className={`${inputClassName} max-w-44`}
         />
       </label>
     )

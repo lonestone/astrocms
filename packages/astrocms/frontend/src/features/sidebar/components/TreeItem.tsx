@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react'
 import {
-  MdFolder,
-  MdFolderOpen,
-  MdOutlineDescription,
-} from 'react-icons/md'
-import { BsDatabase, BsDatabaseFill } from 'react-icons/bs'
+  TbChevronRight,
+  TbDatabase,
+  TbFileText,
+  TbFolder,
+  TbFolderOpen,
+} from 'react-icons/tb'
 import type { TreeNode, FrontmatterFieldSchema } from '../../../api.js'
 import { useCurrentLang } from '../../common/contexts/CurrentLangContext.js'
 import { getFolderTarget } from '../../common/utils/folderTarget.js'
@@ -52,6 +53,9 @@ export interface TreeItemProps {
   isCollectionFolder: (path: string) => boolean
   searching?: boolean
 }
+
+const INDENT = 16
+const BASE_PAD = 8
 
 export function TreeItem(props: TreeItemProps) {
   const {
@@ -123,8 +127,8 @@ export function TreeItem(props: TreeItemProps) {
   }, [isRealFolder, node.children, effectiveSort, effectiveLang])
 
   if (isFile && !isSupported) return null
-  // During search, filterTree has already decided what to include — trust it.
-  // Otherwise, hide folders that hold no editable content.
+  // During search, filterTree has already decided what to include. Otherwise,
+  // hide folders that hold no editable content.
   if (!isFile && !searching && !hasSupportedFiles(node)) return null
 
   const handleClick = () => {
@@ -143,9 +147,6 @@ export function TreeItem(props: TreeItemProps) {
     e.preventDefault()
     onOpenActionsMenu(node, e.clientX, e.clientY)
   }
-
-  const FolderIcon = expanded && isRealFolder ? MdFolder : MdFolderOpen
-  const CollectionIcon = expanded ? BsDatabaseFill : BsDatabase
 
   // Display label: custom name field's value when the ancestor collection
   // asks for one, falling back to the filename. Only files and collapsed
@@ -185,12 +186,32 @@ export function TreeItem(props: TreeItemProps) {
   const childInheritedNameField =
     effectiveNameField !== FILENAME_FIELD ? effectiveNameField : undefined
 
+  const paddingLeft = BASE_PAD + depth * INDENT
+
+  const iconClass = `h-4 w-4 shrink-0 ${
+    isSelected ? 'text-accent-text' : ''
+  }`
+
+  let icon: React.ReactNode
+  if (isFile || isCollapsedFolder) {
+    icon = (
+      <TbFileText className={`${iconClass} ${isSelected ? '' : 'text-text-muted'}`} />
+    )
+  } else if (isCollection) {
+    icon = <TbDatabase className={`${iconClass} text-accent-text`} />
+  } else if (expanded) {
+    icon = <TbFolderOpen className={`${iconClass} text-text-secondary`} />
+  } else {
+    icon = <TbFolder className={`${iconClass} text-text-secondary`} />
+  }
+
   return (
     <div>
       <div
         role="button"
         tabIndex={0}
         aria-label={node.name}
+        aria-expanded={isRealFolder ? expanded : undefined}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onKeyDown={(e) => {
@@ -199,36 +220,26 @@ export function TreeItem(props: TreeItemProps) {
             handleClick()
           }
         }}
-        style={{ paddingLeft: `${8 + depth * 14}px` }}
-        className={`group relative py-1 pr-1 flex items-center gap-1 select-none ${
-          isSelected ? 'bg-primary text-white' : 'text-text hover:bg-bg-main'
+        style={{ paddingLeft }}
+        className={`group relative mx-1.5 flex h-8 items-center gap-1.5 rounded-md pr-1 select-none transition-colors duration-100 ${
+          isSelected
+            ? 'bg-accent-soft text-accent-text'
+            : 'text-text hover:bg-surface-hover'
         } ${
-          isFile && isSupported
-            ? 'cursor-pointer'
-            : isFile
-            ? 'cursor-default'
-            : 'cursor-pointer'
+          isFile && !isSupported ? 'cursor-default' : 'cursor-pointer'
         } ${isFile || isCollapsedFolder ? 'font-normal' : 'font-medium'}`}
       >
-        {isFile || isCollapsedFolder ? (
-          <MdOutlineDescription
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isSelected ? 'text-white' : 'text-text-muted'
-            }`}
-          />
-        ) : isCollection ? (
-          <CollectionIcon
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isSelected ? 'text-white' : 'text-primary'
+        {isRealFolder ? (
+          <TbChevronRight
+            size={14}
+            className={`-ml-0.5 shrink-0 text-text-faint transition-transform duration-150 ${
+              expanded ? 'rotate-90' : ''
             }`}
           />
         ) : (
-          <FolderIcon
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isSelected ? 'text-white' : 'text-amber-500'
-            }`}
-          />
+          <span className="w-[9px] shrink-0" />
         )}
+        {icon}
 
         {isRenaming ? (
           <InlineRenameInput
@@ -238,14 +249,12 @@ export function TreeItem(props: TreeItemProps) {
           />
         ) : (
           <>
-            <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">
-              {rowLabel}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-ui">{rowLabel}</span>
             {rightLabel && (
               <span
                 title={`${parentSortField}: ${rightLabel}`}
-                className={`shrink-0 max-w-[40%] overflow-hidden text-ellipsis whitespace-nowrap text-xs group-hover:hidden ${
-                  isSelected ? 'text-white/80' : 'text-text-muted'
+                className={`max-w-[40%] shrink-0 truncate text-2xs tabular-nums group-hover:hidden ${
+                  isSelected ? 'text-accent-text/70' : 'text-text-faint'
                 }`}
               >
                 {rightLabel}
@@ -276,8 +285,8 @@ export function TreeItem(props: TreeItemProps) {
         <div className="relative">
           <span
             aria-hidden="true"
-            className="absolute top-0 bottom-0 w-px bg-border pointer-events-none"
-            style={{ left: `${8 + depth * 14 + 7}px` }}
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-border"
+            style={{ left: `${paddingLeft + 7 + 6}px` }}
           />
           {sortedChildren.map((child) => (
             <TreeItem

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { FiTrash2 } from 'react-icons/fi'
+import { TbTrash } from 'react-icons/tb'
 import { GitFileDiff } from './GitFileDiff.js'
 import {
   useGitDiscard,
@@ -19,14 +19,15 @@ const STATUS_LABEL: Record<string, string> = {
   A: 'Added',
   D: 'Deleted',
   R: 'Renamed',
-  '?': 'Untracked',
-  U: 'Unmerged',
+  '?': 'New',
+  U: 'Conflict',
 }
 
 function statusStyle(status: string) {
-  if (status === 'D') return 'bg-red-100 text-red-700'
-  if (status === 'A' || status === '?') return 'bg-green-100 text-green-700'
-  return 'bg-blue-100 text-blue-700'
+  if (status === 'D') return 'bg-danger-soft text-danger-text'
+  if (status === 'A' || status === '?') return 'bg-success-soft text-success-text'
+  if (status === 'U') return 'bg-warning-soft text-warning-text'
+  return 'bg-accent-soft text-accent-text'
 }
 
 export function GitReviewFile({ file, diff }: Props) {
@@ -57,66 +58,71 @@ export function GitReviewFile({ file, diff }: Props) {
     }
   }
 
+  const dir = file.path.includes('/')
+    ? file.path.slice(0, file.path.lastIndexOf('/') + 1)
+    : ''
+  const base = file.path.slice(dir.length)
+
   return (
     <section
       id={`file-${file.path}`}
-      className="rounded-lg border border-border bg-white overflow-hidden"
+      className={`overflow-hidden rounded-panel border bg-surface-raised transition-colors ${
+        file.staged ? 'border-border' : 'border-border opacity-80'
+      }`}
     >
       <header
         onClick={handleHeaderClick}
-        className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50 sticky top-0 z-10 cursor-pointer select-none hover:bg-gray-100"
+        className="sticky top-0 z-10 flex cursor-pointer select-none items-center gap-3 border-b border-border bg-surface px-4 py-2.5 transition-colors hover:bg-surface-hover"
       >
         <input
           type="checkbox"
           checked={file.staged}
           onChange={(e) => setStaged(e.target.checked)}
           onClick={(e) => e.stopPropagation()}
-          className="accent-primary w-4 h-4 cursor-pointer"
+          className="h-3.5 w-3.5 cursor-pointer accent-accent"
           aria-label={`Include ${file.path}`}
         />
         <span
-          className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusStyle(
+          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle(
             file.status
           )}`}
         >
           {STATUS_LABEL[file.status] || file.status}
         </span>
         <span
-          className="font-mono text-xs flex-1 truncate"
+          className="min-w-0 flex-1 truncate font-mono text-ui"
           title={file.path}
         >
-          {file.path}
+          <span className="text-text-muted">{dir}</span>
+          <span className="text-text">{base}</span>
         </span>
         {confirmDiscard ? (
           <div className="flex gap-1">
-            <Button
-              size="sm"
-              className="border-danger! text-danger! hover:bg-red-50!"
-              onClick={handleDiscard}
-            >
-              Confirm discard file
+            <Button size="sm" variant="danger" onClick={handleDiscard}>
+              Discard changes
             </Button>
             <Button
               size="sm"
+              variant="ghost"
               onClick={(e) => {
                 e.stopPropagation()
                 setConfirmDiscard(false)
               }}
             >
-              Cancel
+              Keep
             </Button>
           </div>
         ) : (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="ghost"
             onClick={handleDiscard}
-            className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-danger px-2 py-1 rounded cursor-pointer"
+            icon={<TbTrash size={14} />}
             aria-label={`Discard all changes for ${file.path}`}
-            tabIndex={0}
+            className="hover:text-danger-text!"
           >
-            <FiTrash2 size={12} />
-            Discard file
-          </button>
+            Discard
+          </Button>
         )}
       </header>
       <GitFileDiff path={file.path} diff={diff} />

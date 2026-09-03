@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { FiTrash2 } from 'react-icons/fi'
+import { TbTrash } from 'react-icons/tb'
+import Button from '../../common/components/Button.js'
 import { useGitDiscardHunk } from '../hooks/useGit.js'
 
 interface Props {
@@ -71,8 +72,8 @@ export function GitFileDiff({ path, diff }: Props) {
 
   if (hunks.length === 0) {
     return (
-      <div className="px-4 py-6 text-xs text-text-muted text-center">
-        No changes to display.
+      <div className="px-4 py-6 text-center text-xs text-text-muted">
+        No line changes to show.
       </div>
     )
   }
@@ -101,46 +102,43 @@ export function GitFileDiff({ path, diff }: Props) {
         const isConfirm = confirm === i
         return (
           <div key={i}>
-            <div className="flex items-center gap-3 px-4 py-1 bg-blue-50 border-y border-blue-100">
-              <code className="text-[11px] text-blue-700 flex-1 font-mono truncate">
+            <div className="flex items-center gap-3 bg-surface-inset px-4 py-1">
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-text-muted">
                 {hunk.header}
               </code>
               {isConfirm ? (
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="danger"
                     onClick={() => handleDiscard(i, hunk)}
                     disabled={isPending}
                     aria-label="Confirm discard hunk"
-                    tabIndex={0}
-                    className="text-[11px] font-semibold text-danger border border-danger rounded px-2 py-0.5 hover:bg-red-50 disabled:opacity-50 cursor-pointer"
                   >
-                    {isPending ? '...' : 'Confirm discard'}
-                  </button>
-                  <button
-                    type="button"
+                    {isPending ? 'Discarding' : 'Discard hunk'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => setConfirm(null)}
                     aria-label="Cancel"
-                    tabIndex={0}
-                    className="text-[11px] text-text-muted border border-border rounded px-2 py-0.5 hover:bg-gray-100 cursor-pointer"
                   >
-                    Cancel
-                  </button>
+                    Keep
+                  </Button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => handleDiscard(i, hunk)}
                   aria-label="Discard this hunk"
-                  tabIndex={0}
-                  className="inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-danger rounded px-1.5 py-0.5 cursor-pointer"
+                  className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-xs text-text-muted cursor-pointer transition-colors hover:bg-danger-soft hover:text-danger-text"
                 >
-                  <FiTrash2 size={11} />
+                  <TbTrash size={13} />
                   Discard
                 </button>
               )}
             </div>
-            <pre className="font-mono text-xs leading-5">
+            <pre className="font-mono text-xs leading-6">
               {hunk.lines.map((line, j) => {
                 if (line.kind === 'nonewline') {
                   return (
@@ -151,10 +149,10 @@ export function GitFileDiff({ path, diff }: Props) {
                 }
                 const bg =
                   line.kind === 'add'
-                    ? 'bg-green-50'
+                    ? 'bg-diff-add text-diff-add-text'
                     : line.kind === 'remove'
-                    ? 'bg-red-50'
-                    : ''
+                    ? 'bg-diff-remove text-diff-remove-text'
+                    : 'text-text-secondary'
                 const marker =
                   line.kind === 'add'
                     ? '+'
@@ -162,11 +160,7 @@ export function GitFileDiff({ path, diff }: Props) {
                     ? '-'
                     : ' '
                 const markerColor =
-                  line.kind === 'add'
-                    ? 'text-green-700'
-                    : line.kind === 'remove'
-                    ? 'text-red-700'
-                    : 'text-text-muted'
+                  line.kind === 'context' ? 'text-text-faint' : 'opacity-70'
                 return (
                   <div key={j} className={`flex px-4 ${bg}`}>
                     <span
@@ -185,7 +179,7 @@ export function GitFileDiff({ path, diff }: Props) {
         )
       })}
       {discardHunk.error && (
-        <div className="px-4 py-2 text-xs text-danger">
+        <div className="px-4 py-2 text-xs text-danger-text">
           {discardHunk.error.message}
         </div>
       )}

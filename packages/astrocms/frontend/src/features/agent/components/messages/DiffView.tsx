@@ -10,21 +10,21 @@ export function DiffView({ oldStr, newStr }: Props) {
   const changes = useMemo(() => diffLines(oldStr ?? '', newStr ?? ''), [oldStr, newStr])
 
   return (
-    <div className="font-mono text-[10px] leading-relaxed">
+    <div className="font-mono text-xs leading-relaxed">
       {changes.map((change, i) => {
         const lines = change.value.replace(/\n$/, '').split('\n')
         return lines.map((line, j) => (
           <div
             key={`${i}-${j}`}
-            className={
+            className={`-mx-3 px-3 ${
               change.added
-                ? 'bg-green-100 text-green-900'
+                ? 'bg-diff-add text-diff-add-text'
                 : change.removed
-                  ? 'bg-red-100 text-red-900'
-                  : 'text-blue-900 opacity-50'
-            }
+                  ? 'bg-diff-remove text-diff-remove-text'
+                  : 'text-text-muted'
+            }`}
           >
-            <span className="select-none inline-block w-3 text-center opacity-60">
+            <span className="inline-block w-3 select-none text-center opacity-60">
               {change.added ? '+' : change.removed ? '-' : ' '}
             </span>
             {line}

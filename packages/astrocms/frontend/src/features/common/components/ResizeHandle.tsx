@@ -11,9 +11,11 @@ export function ResizeHandle({ onMouseDown, side }: Props) {
       role="separator"
       aria-orientation="vertical"
       onMouseDown={onMouseDown}
-      className={`w-1 cursor-col-resize bg-bg-panel shrink-0 relative hover:bg-primary/30 ${
-        side === 'left' ? 'border-l border-border' : 'border-r border-border'
+      className={`group relative w-px shrink-0 cursor-col-resize bg-border ${
+        side === 'left' ? '' : ''
       }`}
-    />
+    >
+      <div className="absolute inset-y-0 -left-1 w-2.5 transition-colors duration-150 group-hover:bg-accent/30 group-active:bg-accent/40" />
+    </div>
   )
 }

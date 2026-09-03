@@ -13,6 +13,7 @@ interface Props {
   onClick: () => void
 }
 
+/** One segment of the locale switcher shown in the editor header. */
 export default function LangButton({ lang, active, onClick }: Props) {
   const country = LANG_TO_COUNTRY[lang]
   const FlagIcon = country ? FlagComponents[country] : undefined
@@ -23,13 +24,14 @@ export default function LangButton({ lang, active, onClick }: Props) {
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`flex items-center gap-1.5 cursor-pointer text-xs leading-none px-3 pt-1 pb-2.5 mt-1.5 -my-px rounded-t-lg border z-1 transition-colors ${
+      aria-pressed={active}
+      className={`flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-ui leading-none cursor-pointer transition-colors duration-150 ${
         active
-          ? 'border-border border-t-gray-300 border-b-transparent bg-bg'
-          : 'border-transparent text-text-muted hover:border-border'
+          ? 'bg-surface-raised text-text shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--c-border)]'
+          : 'text-text-muted hover:text-text'
       }`}
     >
-      {FlagIcon && <FlagIcon className="w-4 h-3 rounded-sm shrink-0" />}
+      {FlagIcon && <FlagIcon className="h-3 w-4 shrink-0 rounded-[2px]" />}
       <span>{label}</span>
     </button>
   )

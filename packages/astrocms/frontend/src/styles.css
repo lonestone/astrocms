@@ -1,32 +1,379 @@
 @import 'tailwindcss';
 
-@theme {
-  --color-bg: #fafafa;
-  --color-bg-main: #f3f3f3;
-  --color-bg-panel: #f7f7f7;
-  --color-border: #e2e2e2;
-  --color-text: #1a1a1a;
-  --color-text-muted: #666;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-danger: #dc2626;
-  --color-success: #16a34a;
-  --font-size-2xs: 0.625rem;
-  --font-size-2xs--line-height: 1;
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ---------------------------------------------------------------------------
+ * Design tokens
+ *
+ * One neutral ramp (cool zinc), one accent (blue), three semantic colors.
+ * Shapes: controls use `rounded-md` (6px), surfaces use `rounded-panel`
+ * (10px), counters and status chips use `rounded-full`.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --c-bg: #f4f4f5;
+  --c-surface: #fafafa;
+  --c-surface-raised: #ffffff;
+  --c-surface-hover: #efeff1;
+  --c-surface-active: #e6e6e9;
+  --c-surface-inset: #f4f4f5;
+
+  --c-border: #e4e4e7;
+  --c-border-strong: #cfcfd4;
+
+  --c-text: #18181b;
+  --c-text-secondary: #52525b;
+  --c-text-muted: #71717a;
+  --c-text-faint: #a1a1aa;
+
+  --c-accent: #2563eb;
+  --c-accent-hover: #1d4ed8;
+  --c-accent-fg: #ffffff;
+  --c-accent-soft: #eaf1ff;
+  --c-accent-soft-hover: #dbe7ff;
+  --c-accent-text: #1d4ed8;
+  --c-ring: rgb(37 99 235 / 0.28);
+
+  --c-success: #16a34a;
+  --c-success-hover: #15803d;
+  --c-success-soft: #e9f8ee;
+  --c-success-text: #15803d;
+
+  --c-danger: #dc2626;
+  --c-danger-hover: #b91c1c;
+  --c-danger-soft: #fdecec;
+  --c-danger-text: #b91c1c;
+
+  --c-warning: #d97706;
+  --c-warning-soft: #fdf4e3;
+  --c-warning-text: #b45309;
+
+  --c-diff-add: #e6f6ec;
+  --c-diff-add-text: #166534;
+  --c-diff-remove: #fceaea;
+  --c-diff-remove-text: #991b1b;
+
+  --c-code-bg: #f4f4f5;
+  --c-code-block-bg: #18181b;
+  --c-code-block-text: #e4e4e7;
+
+  --c-overlay: rgb(24 24 27 / 0.45);
+  --c-shadow: 24 24 27;
+
+  /* Code blocks (CodeMirror) */
+  --cm-bg: #fafafa;
+  --cm-text: #27272a;
+  --cm-cursor: #18181b;
+  --cm-selection: #dbe7ff;
+  --cm-active-line: rgb(24 24 27 / 0.04);
+  --cm-gutter: #a1a1aa;
+  --cm-border: #e4e4e7;
+  --cm-tooltip-bg: #ffffff;
+  --cm-keyword: #1d4ed8;
+  --cm-operator: #52525b;
+  --cm-string: #15803d;
+  --cm-regexp: #b45309;
+  --cm-number: #c2410c;
+  --cm-comment: #8b8b94;
+  --cm-function: #0f766e;
+  --cm-variable: #27272a;
+  --cm-property: #0e7490;
+  --cm-type: #a16207;
+  --cm-tag: #b91c1c;
+  --cm-attribute: #a16207;
+  --cm-punctuation: #71717a;
+  --cm-meta: #6d28d9;
+  --cm-heading: #18181b;
+  --cm-link: #1d4ed8;
+  --cm-invalid: #dc2626;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-bg: #0e0e10;
+  --c-surface: #141416;
+  --c-surface-raised: #1a1a1d;
+  --c-surface-hover: #212124;
+  --c-surface-active: #2a2a2e;
+  --c-surface-inset: #111113;
+
+  --c-border: #27272a;
+  --c-border-strong: #3f3f46;
+
+  --c-text: #e4e4e7;
+  --c-text-secondary: #a1a1aa;
+  --c-text-muted: #7c7c85;
+  --c-text-faint: #56565e;
+
+  --c-accent: #3b82f6;
+  --c-accent-hover: #5b95f7;
+  --c-accent-fg: #ffffff;
+  --c-accent-soft: rgb(59 130 246 / 0.14);
+  --c-accent-soft-hover: rgb(59 130 246 / 0.22);
+  --c-accent-text: #8ab4ff;
+  --c-ring: rgb(59 130 246 / 0.4);
+
+  --c-success: #15803d;
+  --c-success-hover: #166534;
+  --c-success-soft: rgb(34 197 94 / 0.14);
+  --c-success-text: #6ee7a0;
+
+  --c-danger: #ef4444;
+  --c-danger-hover: #f26565;
+  --c-danger-soft: rgb(239 68 68 / 0.14);
+  --c-danger-text: #f59e9e;
+
+  --c-warning: #f59e0b;
+  --c-warning-soft: rgb(245 158 11 / 0.14);
+  --c-warning-text: #fbbf24;
+
+  --c-diff-add: rgb(34 197 94 / 0.14);
+  --c-diff-add-text: #86efac;
+  --c-diff-remove: rgb(239 68 68 / 0.14);
+  --c-diff-remove-text: #fca5a5;
+
+  --c-code-bg: #27272a;
+  --c-code-block-bg: #0e0e10;
+  --c-code-block-text: #d4d4d8;
+
+  --c-overlay: rgb(0 0 0 / 0.6);
+  --c-shadow: 0 0 0;
+
+  /* Code blocks (CodeMirror) */
+  --cm-bg: #111113;
+  --cm-text: #d4d4d8;
+  --cm-cursor: #e4e4e7;
+  --cm-selection: rgb(59 130 246 / 0.28);
+  --cm-active-line: rgb(255 255 255 / 0.035);
+  --cm-gutter: #56565e;
+  --cm-border: #27272a;
+  --cm-tooltip-bg: #1a1a1d;
+  --cm-keyword: #8ab4ff;
+  --cm-operator: #a1a1aa;
+  --cm-string: #86efac;
+  --cm-regexp: #fcd34d;
+  --cm-number: #fdba74;
+  --cm-comment: #7c7c85;
+  --cm-function: #5eead4;
+  --cm-variable: #d4d4d8;
+  --cm-property: #67e8f9;
+  --cm-type: #fcd34d;
+  --cm-tag: #fca5a5;
+  --cm-attribute: #fcd34d;
+  --cm-punctuation: #8b8b94;
+  --cm-meta: #c4b5fd;
+  --cm-heading: #f4f4f5;
+  --cm-link: #8ab4ff;
+  --cm-invalid: #f87171;
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-raised: var(--c-surface-raised);
+  --color-surface-hover: var(--c-surface-hover);
+  --color-surface-active: var(--c-surface-active);
+  --color-surface-inset: var(--c-surface-inset);
+
+  --color-border: var(--c-border);
+  --color-border-strong: var(--c-border-strong);
+
+  --color-text: var(--c-text);
+  --color-text-secondary: var(--c-text-secondary);
+  --color-text-muted: var(--c-text-muted);
+  --color-text-faint: var(--c-text-faint);
+
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-fg: var(--c-accent-fg);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-soft-hover: var(--c-accent-soft-hover);
+  --color-accent-text: var(--c-accent-text);
+  --color-ring: var(--c-ring);
+
+  --color-success: var(--c-success);
+  --color-success-hover: var(--c-success-hover);
+  --color-success-soft: var(--c-success-soft);
+  --color-success-text: var(--c-success-text);
+
+  --color-danger: var(--c-danger);
+  --color-danger-hover: var(--c-danger-hover);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-danger-text: var(--c-danger-text);
+
+  --color-warning: var(--c-warning);
+  --color-warning-soft: var(--c-warning-soft);
+  --color-warning-text: var(--c-warning-text);
+
+  --color-diff-add: var(--c-diff-add);
+  --color-diff-add-text: var(--c-diff-add-text);
+  --color-diff-remove: var(--c-diff-remove);
+  --color-diff-remove-text: var(--c-diff-remove-text);
+
+  --color-code-bg: var(--c-code-bg);
+  --color-code-block-bg: var(--c-code-block-bg);
+  --color-code-block-text: var(--c-code-block-text);
+
+  --color-overlay: var(--c-overlay);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --text-2xs: 0.8125rem;
+  --text-2xs--line-height: 1.125rem;
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
+  --text-ui: 0.9375rem;
+  --text-ui--line-height: 1.375rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+
+  --radius-panel: 10px;
+
+  --shadow-popover:
+    0 0 0 1px rgb(var(--c-shadow) / 0.06), 0 8px 24px -8px rgb(var(--c-shadow) / 0.28);
+  --shadow-dialog:
+    0 0 0 1px rgb(var(--c-shadow) / 0.06), 0 24px 60px -16px rgb(var(--c-shadow) / 0.45);
+  --shadow-bar: 0 -8px 24px -12px rgb(var(--c-shadow) / 0.22);
+}
+
+/* ---------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    font-size: 14px;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  * {
+    border-color: var(--c-border);
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-border-strong) transparent;
+  }
+
+  ::selection {
+    background: var(--c-accent-soft-hover);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-ring);
+    outline-offset: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Shared surface recipes (used by menus, dialogs and MDXEditor popups)
+ * ------------------------------------------------------------------------- */
+
+@utility popover-surface {
+  background-color: var(--c-surface-raised);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-popover);
+}
+
+/* ---------------------------------------------------------------------------
+ * MDXEditor
+ * ------------------------------------------------------------------------- */
+
+/* Map MDXEditor's Radix-based variables onto our tokens so the editor and
+ * its popups (rendered into a container appended to <body>) follow the app
+ * theme without needing MDXEditor's own dark-theme class. */
+:root .mdxeditor,
+:root .mdxeditor-popup-container {
+  --font-body: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --basePageBg: var(--c-surface-raised);
+  --baseBase: var(--c-surface-raised);
+  --baseBgSubtle: var(--c-surface);
+  --baseBg: var(--c-surface);
+  --baseBgHover: var(--c-surface-hover);
+  --baseBgActive: var(--c-surface-active);
+  --baseLine: var(--c-border);
+  --baseBorder: var(--c-border);
+  --baseBorderHover: var(--c-border-strong);
+  --baseSolid: var(--c-text-muted);
+  --baseSolidHover: var(--c-text-secondary);
+  --baseText: var(--c-text-secondary);
+  --baseTextContrast: var(--c-text);
+
+  --accentBase: var(--c-surface-raised);
+  --accentBgSubtle: var(--c-accent-soft);
+  --accentBg: var(--c-accent-soft);
+  --accentBgHover: var(--c-accent-soft-hover);
+  --accentBgActive: var(--c-accent-soft-hover);
+  --accentLine: var(--c-accent-soft-hover);
+  --accentBorder: var(--c-accent);
+  --accentBorderHover: var(--c-accent-hover);
+  --accentSolid: var(--c-accent);
+  --accentSolidHover: var(--c-accent-hover);
+  --accentText: var(--c-accent-text);
+  --accentTextContrast: var(--c-accent-text);
+
+  --admonitionNoteBg: var(--c-surface-hover);
+  --admonitionNoteBorder: var(--c-border-strong);
+  --admonitionTipBg: var(--c-accent-soft);
+  --admonitionTipBorder: var(--c-accent);
+  --admonitionInfoBg: var(--c-success-soft);
+  --admonitionInfoBorder: var(--c-success);
+  --admonitionCautionBg: var(--c-warning-soft);
+  --admonitionCautionBorder: var(--c-warning);
+  --admonitionDangerBg: var(--c-danger-soft);
+  --admonitionDangerBorder: var(--c-danger);
+
+  color: var(--c-text);
+}
+
+.mdxeditor {
+  background: var(--c-surface-raised);
+}
+
+.mdxeditor .cm-editor {
   font-size: 14px;
-  line-height: 1.6;
+}
+
+.mdxeditor-popup-container {
+  color-scheme: inherit;
 }
 
 .mdxeditor [role='toolbar'] {
-  @apply border-b border-border bg-bg flex-wrap;
+  @apply flex-wrap rounded-none border-b border-border bg-surface px-2 py-1;
+}
+
+.mdxeditor [role='toolbar'] div[role='separator'] {
+  border-right-color: transparent;
 }
 
 .mdxeditor-root-contenteditable {
-  @apply p-4 min-h-75;
+  @apply px-8 py-6 min-h-80;
+}
+
+.mdxeditor-rich-text {
+  font-size: 16px;
 }
 
 .mdxeditor-rich-text > *:first-child {
@@ -36,18 +383,17 @@ body {
   @apply mt-0;
 }
 
-/* Markdown content styles (matching website global.css .md class) */
 .mdxeditor-rich-text h1 {
-  @apply mt-10 mb-5 text-4xl font-bold first:mt-0;
+  @apply mt-10 mb-5 text-3xl font-semibold tracking-tight first:mt-0;
 }
 .mdxeditor-rich-text h2 {
-  @apply mt-10 mb-4 text-3xl font-medium first:mt-0;
+  @apply mt-10 mb-4 text-2xl font-semibold tracking-tight first:mt-0;
 }
 .mdxeditor-rich-text h3 {
-  @apply mt-10 mb-3 text-2xl font-medium first:mt-0;
+  @apply mt-8 mb-3 text-xl font-semibold first:mt-0;
 }
 .mdxeditor-rich-text h4 {
-  @apply mt-8 mb-3 text-xl font-medium first:mt-0;
+  @apply mt-6 mb-2 text-lg font-medium first:mt-0;
 }
 .mdxeditor-rich-text p {
   @apply my-3 leading-relaxed first:mt-0 last:mb-0;
@@ -62,19 +408,19 @@ body {
   @apply mb-1;
 }
 .mdxeditor-rich-text code {
-  @apply rounded bg-bg-main px-1.5 py-0.5 text-sm;
+  @apply rounded-md bg-code-bg px-1.5 py-0.5 text-[0.9em];
 }
 .mdxeditor-rich-text pre {
-  @apply mb-5 overflow-x-auto rounded-lg bg-[#1a1a2e] p-5 text-[#e2e8f0];
+  @apply mb-5 overflow-x-auto rounded-panel bg-code-block-bg p-5 text-code-block-text;
 }
 .mdxeditor-rich-text pre code {
   @apply bg-transparent p-0;
 }
 .mdxeditor-rich-text a {
-  @apply text-primary underline underline-offset-2;
+  @apply text-accent-text underline underline-offset-2;
 }
 .mdxeditor-rich-text blockquote {
-  @apply my-5 border-l-3 border-text-muted bg-bg p-4 text-lg italic text-text-muted;
+  @apply my-5 border-l-2 border-border-strong pl-4 text-text-secondary italic;
 }
 .mdxeditor-rich-text blockquote p:last-child {
   @apply mb-0;
@@ -83,21 +429,24 @@ body {
   @apply my-8 w-full border-collapse;
 }
 .mdxeditor-rich-text th {
-  @apply border-b-2 border-border bg-bg font-semibold;
+  @apply border-b border-border-strong bg-surface font-semibold;
 }
 .mdxeditor-rich-text td {
-  @apply border-b border-bg-main;
+  @apply border-b border-border;
 }
 .mdxeditor-rich-text img {
-  @apply max-w-full;
+  @apply max-w-full rounded-md;
 }
 
 /* Slash command menu */
 .slash-command-menu {
-  @apply bg-white border border-border rounded-md shadow-lg max-h-70 overflow-y-auto min-w-45;
+  @apply popover-surface max-h-72 min-w-48 overflow-y-auto;
 }
 
-/* Agent panel markdown */
+/* ---------------------------------------------------------------------------
+ * Agent panel markdown
+ * ------------------------------------------------------------------------- */
+
 .prose-agent p {
   @apply my-1.5 first:mt-0 last:mb-0;
 }
@@ -111,40 +460,79 @@ body {
   @apply mb-0.5;
 }
 .prose-agent code {
-  @apply rounded bg-bg-main px-1 py-0.5 text-[10px];
+  @apply rounded bg-code-bg px-1 py-0.5 font-mono text-[0.9em];
 }
 .prose-agent pre {
-  @apply my-1.5 overflow-x-auto rounded bg-[#1a1a2e] p-2 text-[10px] text-[#e2e8f0];
+  @apply my-2 overflow-x-auto rounded-md bg-code-block-bg p-3 text-xs text-code-block-text;
 }
 .prose-agent pre code {
   @apply bg-transparent p-0;
 }
 .prose-agent a {
-  @apply text-primary underline;
+  @apply text-accent-text underline underline-offset-2;
 }
 .prose-agent h1,
 .prose-agent h2,
 .prose-agent h3,
 .prose-agent h4 {
-  @apply font-semibold mt-2 mb-1;
+  @apply mt-3 mb-1 font-semibold first:mt-0;
 }
 .prose-agent blockquote {
-  @apply my-1.5 border-l-2 border-text-muted pl-2 text-text-muted italic;
+  @apply my-1.5 border-l-2 border-border-strong pl-2 text-text-secondary italic;
 }
 .prose-agent strong {
   @apply font-semibold;
 }
+.prose-agent hr {
+  @apply my-3 border-border;
+}
 
-@keyframes header-prompt-in {
+/* ---------------------------------------------------------------------------
+ * Motion
+ * ------------------------------------------------------------------------- */
+
+@keyframes pop-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-4px) scale(0.985);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
 }
-.animate-header-prompt-in {
-  animation: header-prompt-in 150ms ease-out;
+.animate-pop-in {
+  animation: pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 120ms ease-out;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  @apply rounded-md;
+  background: linear-gradient(
+    90deg,
+    var(--c-surface-hover) 0%,
+    var(--c-surface-active) 50%,
+    var(--c-surface-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
 }

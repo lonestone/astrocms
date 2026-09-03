@@ -5,6 +5,7 @@ import {
   useAuiState,
   useAui,
 } from '@assistant-ui/react'
+import { TbArrowUp, TbPlayerStopFilled } from 'react-icons/tb'
 import { UserMessage } from './UserMessage.js'
 import { AssistantMessage } from './AssistantMessage.js'
 import { RecentConversations } from './RecentConversations.js'
@@ -47,11 +48,11 @@ export function AgentThread({
   const hasHistory = loadedMessages && loadedMessages.length > 0
 
   return (
-    <ThreadPrimitive.Root className="flex flex-col flex-1 overflow-hidden">
+    <ThreadPrimitive.Root className="flex flex-1 flex-col overflow-hidden">
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="flex-1 overflow-y-auto p-3"
+        className="flex-1 overflow-y-auto px-3 py-3"
       >
         {hasHistory ? (
           <LoadedMessages messages={loadedMessages} />
@@ -96,23 +97,38 @@ function AgentComposer() {
   }, [aui])
 
   return (
-    <ComposerPrimitive.Root className="p-3 border-t border-border flex gap-2 bg-white shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]">
-      <ComposerPrimitive.Input
-        placeholder={'Ask Claude...\nEnter to send, Shift+Enter for new line'}
-        className="flex-1 p-2.5 border-2 border-border rounded-md resize-none outline-none text-sm font-[inherit] bg-white min-h-[72px] max-h-[160px] focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-        rows={3}
-        autoFocus
-      />
-      {isRunning && (
-        <button
-          onClick={handleStop}
-          className="self-end px-3 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 cursor-pointer"
-          aria-label="Stop generation"
-          tabIndex={0}
-        >
-          Stop
-        </button>
-      )}
-    </ComposerPrimitive.Root>
+    <div className="shrink-0 border-t border-border bg-surface p-3">
+      <ComposerPrimitive.Root className="flex flex-col rounded-panel border border-border bg-surface-raised transition-colors duration-150 focus-within:border-accent focus-within:ring-2 focus-within:ring-ring">
+        <ComposerPrimitive.Input
+          placeholder="Ask Claude to edit, create or review content"
+          className="max-h-40 min-h-16 w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-base leading-6 text-text outline-none placeholder:text-text-faint"
+          rows={3}
+          autoFocus
+        />
+        <div className="flex items-center justify-between px-2 pb-2">
+          <span className="pl-1 text-xs text-text-faint">
+            Enter to send, Shift + Enter for a new line
+          </span>
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-danger-soft px-3 text-xs font-medium text-danger-text cursor-pointer transition-colors hover:bg-danger hover:text-white"
+              aria-label="Stop generation"
+            >
+              <TbPlayerStopFilled size={14} />
+              Stop
+            </button>
+          ) : (
+            <ComposerPrimitive.Send
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-accent-fg transition-colors enabled:hover:bg-accent-hover enabled:cursor-pointer disabled:opacity-40"
+              aria-label="Send"
+            >
+              <TbArrowUp size={16} />
+            </ComposerPrimitive.Send>
+          )}
+        </div>
+      </ComposerPrimitive.Root>
+    </div>
   )
 }

@@ -7,12 +7,13 @@ import React, {
   useMemo,
   useRef,
 } from 'react'
-import { MdMoreHoriz } from 'react-icons/md'
-import { FiUpload } from 'react-icons/fi'
+import { TbCornerLeftUp, TbDots, TbFolder, TbPhoto, TbUpload } from 'react-icons/tb'
 import { useFiles, type FileActionKind } from '../contexts/FilesContext.js'
 import { useAssetsTree } from '../hooks/useAssetsTree.js'
 import { uploadMedia, type MediaRoot, type TreeNode } from '../../../api.js'
 import Button from '../../common/components/Button.js'
+import { Dialog } from '../../common/components/Dialog.js'
+import { IconButton } from '../../common/components/IconButton.js'
 import { TabBar, type TabItem } from '../../common/components/TabBar.js'
 import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import { findNode } from '../../common/utils/findNode.js'
@@ -225,143 +226,136 @@ function MediaModalOverlay({
   const breadcrumb = projectPath(dirs, root, currentDir)
 
   return (
-    <div
-      className="fixed inset-0 z-10000 flex items-center justify-center bg-black/40"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
+    <Dialog
+      title="Select media"
+      description={breadcrumb}
+      onClose={onClose}
+      width="lg"
+      flush
+      className="max-h-[80vh]"
+      headerActions={
+        <>
+          <Button
+            variant="primary"
+            icon={<TbUpload size={16} />}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleUpload}
+            className="hidden"
+          />
+        </>
+      }
     >
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">Select media</span>
-            <span className="text-sm text-gray-400">{breadcrumb}</span>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="primary"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FiUpload className="inline -mt-px mr-1" />
-              Upload
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleUpload}
-              className="hidden"
-            />
-            <button
-              onClick={onClose}
-              className="bg-transparent border-none text-lg cursor-pointer text-gray-400 leading-none px-1 hover:text-gray-600"
-              aria-label="Close"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
+      <TabBar tabs={tabs} active={activeTab} onSelect={handleTab} />
 
-        <TabBar tabs={tabs} active={activeTab} onSelect={handleTab} />
-
-        {/* Navigation */}
+      <div className="flex-1 overflow-auto px-5 pt-3 pb-5">
         {canGoUp && (
-          <div className="px-4 pt-2">
-            <button
-              onClick={handleParent}
-              className="bg-transparent border-none cursor-pointer text-primary text-sm p-0 hover:underline"
-            >
-              &larr; Parent directory
-            </button>
+          <button
+            type="button"
+            onClick={handleParent}
+            className="mb-2 inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-text-secondary cursor-pointer transition-colors hover:bg-surface-hover hover:text-text"
+          >
+            <TbCornerLeftUp size={16} />
+            Parent folder
+          </button>
+        )}
+
+        {directories.length > 0 && (
+          <div className="mb-3 grid grid-cols-2 gap-1 sm:grid-cols-3">
+            {directories.map((entry) => (
+              <div
+                key={entry.path}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open folder ${entry.name}`}
+                onClick={() => handleNavigate(entry.path)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleNavigate(entry.path)
+                  }
+                }}
+                className="flex h-8 items-center gap-2 rounded-md px-2 text-ui text-text cursor-pointer transition-colors hover:bg-surface-hover"
+              >
+                <TbFolder size={16} className="shrink-0 text-text-secondary" />
+                <span className="truncate">{entry.name}</span>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto px-4 pt-2 pb-4">
-          {/* Directories */}
-          {directories.length > 0 && (
-            <div className="mb-3">
-              {directories.map((entry) => (
-                <div
-                  key={entry.path}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open folder ${entry.name}`}
-                  onClick={() => handleNavigate(entry.path)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleNavigate(entry.path)
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-sm hover:bg-gray-100"
-                >
-                  <span className="text-sm">&#x1F4C1;</span>
-                  {entry.name}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Media files grid */}
-          {mediaFiles.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
-              {mediaFiles.map((entry) => (
-                <div
-                  key={entry.path}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select ${entry.name}`}
-                  onClick={() => handleSelectEntry(entry)}
-                  onContextMenu={(e) => {
+        {mediaFiles.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
+            {mediaFiles.map((entry) => (
+              <div
+                key={entry.path}
+                role="button"
+                tabIndex={0}
+                aria-label={`Select ${entry.name}`}
+                onClick={() => handleSelectEntry(entry)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  openEntryMenu(entry, e.clientX, e.clientY)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    openEntryMenu(entry, e.clientX, e.clientY)
+                    handleSelectEntry(entry)
+                  }
+                }}
+                className="group relative flex cursor-pointer flex-col gap-1.5 rounded-panel border border-border bg-surface-raised p-1.5 transition-colors hover:border-accent hover:bg-accent-soft"
+              >
+                <IconButton
+                  label="Actions"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const rect = (
+                      e.currentTarget as HTMLElement
+                    ).getBoundingClientRect()
+                    openEntryMenu(entry, rect.right, rect.bottom)
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleSelectEntry(entry)
-                    }
-                  }}
-                  className="group relative border border-border rounded p-1 cursor-pointer flex flex-col items-center gap-1 hover:border-primary"
+                  className="absolute top-2 right-2 z-10 bg-surface-raised/90 opacity-0 shadow-popover group-hover:opacity-100 focus-visible:opacity-100"
                 >
-                  <button
-                    type="button"
-                    aria-label="Actions"
-                    title="Actions"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const rect = (
-                        e.currentTarget as HTMLElement
-                      ).getBoundingClientRect()
-                      openEntryMenu(entry, rect.right, rect.bottom)
-                    }}
-                    className="absolute top-1 right-1 w-5 h-5 rounded bg-white/80 text-text-muted hover:bg-white opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center justify-center shadow-sm"
-                  >
-                    <MdMoreHoriz className="w-4 h-4" />
-                  </button>
+                  <TbDots size={15} />
+                </IconButton>
+                <div className="flex h-20 items-center justify-center overflow-hidden rounded-md bg-surface-inset">
                   <img
                     src={previewUrl(entry)}
                     alt={entry.name}
-                    className="w-full h-20 object-contain bg-bg rounded-sm"
+                    loading="lazy"
+                    className="max-h-full max-w-full object-contain"
                   />
-                  <span
-                    className="text-xs leading-tight text-gray-400 text-center overflow-hidden text-ellipsis whitespace-nowrap w-full"
-                    title={entry.name}
-                  >
-                    {entry.name}
-                  </span>
                 </div>
-              ))}
-            </div>
-          ) : directories.length === 0 ? (
-            <div className="text-gray-400 p-4 text-center text-sm">
-              No media files in this directory
-            </div>
-          ) : null}
-        </div>
+                <span
+                  className="w-full truncate px-0.5 text-center text-xs text-text-secondary"
+                  title={entry.name}
+                >
+                  {entry.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : directories.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-center text-xs text-text-muted">
+            <TbPhoto size={22} className="text-text-faint" />
+            <span>No images in this folder yet.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Upload one
+            </Button>
+          </div>
+        ) : null}
       </div>
-    </div>
+    </Dialog>
   )
 }

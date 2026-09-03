@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import type { TreeNode } from '../../../api.js'
 import Button from '../../common/components/Button.js'
+import { Dialog } from '../../common/components/Dialog.js'
+import { Field, inputClass } from '../../common/components/Input.js'
 import { parentOf } from '../../common/utils/paths.js'
 import { useFiles } from '../contexts/FilesContext.js'
 
@@ -58,40 +60,11 @@ export function MoveDialog({ node, onCancel, onConfirm }: Props) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/30"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
-    >
-      <div className="bg-white rounded-lg w-full max-w-sm p-5 shadow-2xl">
-        <h3 className="mb-3 text-sm font-semibold">Move {node.name}</h3>
-        <label className="block mb-4 text-xs text-gray-500">
-          Destination folder
-          <select
-            autoFocus
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleSubmit()
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                onCancel()
-              }
-            }}
-            className="block w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-xs font-mono bg-white"
-          >
-            {folders.map((f) => (
-              <option key={f} value={f}>
-                {f === '' ? '/' : f}
-              </option>
-            ))}
-          </select>
-        </label>
-        {error && <div className="mb-3 text-xs text-danger">{error}</div>}
-        <div className="flex justify-end gap-2">
+    <Dialog
+      title={`Move ${node.name}`}
+      onClose={onCancel}
+      footer={
+        <>
           <Button variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
@@ -100,10 +73,32 @@ export function MoveDialog({ node, onCancel, onConfirm }: Props) {
             onClick={handleSubmit}
             disabled={busy || value === currentParent}
           >
-            {busy ? '...' : 'Move'}
+            {busy ? 'Moving' : 'Move'}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <Field label="Destination folder" htmlFor="move-dest" error={error}>
+        <select
+          id="move-dest"
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
+          className={`${inputClass} font-mono text-xs`}
+        >
+          {folders.map((f) => (
+            <option key={f} value={f}>
+              {f === '' ? '/' : f}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </Dialog>
   )
 }

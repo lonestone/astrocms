@@ -1,5 +1,8 @@
 import React, { useCallback } from 'react'
 import type { FrontmatterFieldSchema } from '../../../api.js'
+import { TbPlus, TbX } from 'react-icons/tb'
+import Button from '../../common/components/Button.js'
+import { IconButton } from '../../common/components/IconButton.js'
 import { PropInput, formatLabel } from './PropInput.js'
 import type { FrontmatterData } from '../../../../../shared/frontmatter.js'
 
@@ -66,7 +69,7 @@ export default function FrontmatterEditor({
   onChange,
 }: Props) {
   return (
-    <div className="flex flex-col gap-0.5 px-3 py-2 bg-bg border-b border-border rounded-t-md text-xs">
+    <div className="flex flex-col gap-2 border-b border-border bg-surface px-5 py-4 text-ui">
       <FieldGroup
         schema={schema}
         data={frontmatter}
@@ -109,8 +112,11 @@ function FieldGroup({ schema, data, onChange, depth }: FieldGroupProps) {
         if (field.type === 'object' && field.children) {
           const nested = (data[field.name] ?? {}) as FrontmatterData
           return (
-            <div key={field.name} style={{ paddingLeft: depth > 0 ? 16 : 0 }}>
-              <div className="font-medium text-gray-400 pt-2 pb-0.5">
+            <div
+              key={field.name}
+              className={depth > 0 ? 'ml-4 border-l border-border pl-3' : ''}
+            >
+              <div className="pt-2 pb-1 text-xs font-semibold text-text-muted">
                 {formatLabel(field.name)}
               </div>
               <FieldGroup
@@ -141,7 +147,7 @@ function FieldGroup({ schema, data, onChange, depth }: FieldGroupProps) {
         const raw = data[field.name]
         const arrayValue = Array.isArray(raw) ? raw.map(String) : []
         return (
-          <div key={field.name} style={{ paddingLeft: depth > 0 ? 16 : 0 }}>
+          <div key={field.name}>
             <PropInput
               schema={field}
               value={toDisplayValue(raw)}
@@ -183,24 +189,25 @@ function ObjectArrayField({
     onChange([...items, {}])
   }
   return (
-    <div style={{ paddingLeft: depth > 0 ? 16 : 0 }}>
-      <div className="font-medium text-gray-400 pt-2 pb-0.5">
+    <div className={depth > 0 ? 'ml-4 border-l border-border pl-3' : ''}>
+      <div className="pt-2 pb-1 text-xs font-semibold text-text-muted">
         {formatLabel(name)}
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         {items.map((item, i) => (
           <div
             key={i}
-            className="relative border border-gray-200 rounded-sm pl-1.5 pr-6 py-1 flex flex-col gap-0.5"
+            className="relative flex flex-col gap-1 rounded-md border border-border bg-surface-raised py-1.5 pl-2.5 pr-8"
           >
-            <button
-              type="button"
+            <IconButton
+              label="Remove item"
+              size="sm"
+              tone="danger"
               onClick={() => removeItem(i)}
-              title="Remove item"
-              className="absolute top-0.5 right-1 bg-transparent border-none cursor-pointer text-gray-300 text-sm leading-none px-0.5 hover:text-gray-500"
+              className="absolute top-1 right-1"
             >
-              ×
-            </button>
+              <TbX size={14} />
+            </IconButton>
             <FieldGroup
               schema={itemSchema}
               data={item}
@@ -209,13 +216,15 @@ function ObjectArrayField({
             />
           </div>
         ))}
-        <button
-          type="button"
+        <Button
+          variant="dashed"
+          size="sm"
+          icon={<TbPlus size={14} />}
           onClick={addItem}
-          className="self-start bg-transparent border border-dashed border-gray-300 rounded-sm cursor-pointer text-gray-400 text-2xs px-2 py-px hover:border-gray-400 hover:text-gray-600"
+          className="self-start"
         >
-          + Add
-        </button>
+          Add
+        </Button>
       </div>
     </div>
   )

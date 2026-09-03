@@ -1,4 +1,5 @@
 import React from 'react'
+import { TbChevronRight } from 'react-icons/tb'
 
 interface Props {
   open: boolean
@@ -6,11 +7,11 @@ interface Props {
 
 export function Arrow({ open }: Props) {
   return (
-    <span
-      className="inline-block transition-transform text-[10px]"
-      style={{ transform: open ? 'rotate(90deg)' : '' }}
-    >
-      &#9654;
-    </span>
+    <TbChevronRight
+      size={14}
+      className={`shrink-0 transition-transform duration-150 ${
+        open ? 'rotate-90' : ''
+      }`}
+    />
   )
 }

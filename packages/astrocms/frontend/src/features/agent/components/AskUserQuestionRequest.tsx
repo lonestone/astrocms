@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
+import { TbMessageQuestion } from 'react-icons/tb'
 import type { PendingPermission } from '../../../api.js'
 import { respondToPermission } from '../../../api.js'
+import Button from '../../common/components/Button.js'
+import { inputCompactClass } from '../../common/components/Input.js'
 
 interface Option {
   label: string
@@ -47,7 +50,7 @@ export function AskUserQuestionRequest({ permission, onResolved }: Props) {
     })
   }
 
-  function buildAnswer(qIndex: number, q: Question): string | null {
+  function buildAnswer(qIndex: number): string | null {
     const picked = selections[qIndex]
     const hasOther = picked.includes(OTHER_KEY)
     const labels = picked.filter((l) => l !== OTHER_KEY)
@@ -60,16 +63,14 @@ export function AskUserQuestionRequest({ permission, onResolved }: Props) {
     return labels.join(', ')
   }
 
-  const allAnswered = questions.every(
-    (q, i) => buildAnswer(i, q) !== null
-  )
+  const allAnswered = questions.every((_, i) => buildAnswer(i) !== null)
 
   async function submit() {
     if (!allAnswered || submitting) return
     setSubmitting(true)
     const answers: Record<string, string> = {}
     questions.forEach((q, i) => {
-      const a = buildAnswer(i, q)
+      const a = buildAnswer(i)
       if (a !== null) answers[q.question] = a
     })
     await respondToPermission(permission.id, 'allow', {
@@ -92,13 +93,14 @@ export function AskUserQuestionRequest({ permission, onResolved }: Props) {
   }
 
   return (
-    <div className="mx-3 mb-3 rounded-md border border-indigo-300 bg-indigo-50 overflow-hidden">
-      <div className="px-3 py-2 border-b border-indigo-200">
-        <div className="text-[11px] font-semibold text-indigo-900">
+    <div className="mb-3 overflow-hidden rounded-panel border border-accent/30 bg-surface-raised animate-pop-in">
+      <div className="flex items-center gap-2 border-b border-border bg-accent-soft px-3 py-2">
+        <TbMessageQuestion size={16} className="text-accent-text" />
+        <span className="text-xs font-semibold text-accent-text">
           Claude needs your input
-        </div>
+        </span>
       </div>
-      <div className="px-3 py-2 flex flex-col gap-3">
+      <div className="flex flex-col gap-4 px-3 py-3">
         {questions.map((q, qi) => (
           <QuestionField
             key={qi}
@@ -116,25 +118,17 @@ export function AskUserQuestionRequest({ permission, onResolved }: Props) {
           />
         ))}
       </div>
-      <div className="px-3 py-2 border-t border-indigo-200 flex gap-2">
-        <button
+      <div className="flex gap-2 border-t border-border bg-surface px-3 py-2">
+        <Button
+          variant="primary"
           onClick={submit}
           disabled={submitting || !allAnswered}
-          className="px-3 py-1 text-[11px] font-semibold rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
-          aria-label="Submit answers"
-          tabIndex={0}
         >
           Submit
-        </button>
-        <button
-          onClick={cancel}
-          disabled={submitting}
-          className="px-3 py-1 text-[11px] font-semibold rounded border border-indigo-300 text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer"
-          aria-label="Dismiss question"
-          tabIndex={0}
-        >
+        </Button>
+        <Button variant="ghost" onClick={cancel} disabled={submitting}>
           Dismiss
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -157,78 +151,72 @@ function QuestionField({
 
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="flex items-center gap-1.5 mb-1">
+      <legend className="mb-1.5 flex flex-col gap-1">
         {question.header && (
-          <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-200 text-indigo-900 text-[9px] font-semibold uppercase tracking-wide">
+          <span className="self-start rounded-full bg-surface-active px-1.5 py-0.5 text-xs font-medium text-text-secondary">
             {question.header}
           </span>
         )}
-        <span className="text-[11px] font-medium text-indigo-900">
+        <span className="text-ui font-medium text-text">
           {question.question}
         </span>
       </legend>
-      {question.options.map((opt) => {
-        const isSelected = selected.includes(opt.label)
-        return (
-          <label
-            key={opt.label}
-            className={`flex items-start gap-2 px-2 py-1.5 rounded border text-[11px] cursor-pointer ${
-              isSelected
-                ? 'border-indigo-400 bg-indigo-100'
-                : 'border-indigo-200 bg-white hover:bg-indigo-50'
-            }`}
-          >
-            <input
-              type={multi ? 'checkbox' : 'radio'}
-              name={question.question}
-              checked={isSelected}
-              onChange={() => onToggle(opt.label)}
-              className="mt-0.5 accent-indigo-600"
-            />
-            <span className="flex-1 min-w-0">
-              <span className="font-medium text-indigo-900">{opt.label}</span>
-              {opt.description && (
-                <span className="block text-[10px] text-indigo-700 mt-0.5">
-                  {opt.description}
-                </span>
-              )}
-            </span>
-          </label>
-        )
-      })}
-      <OtherOption
+      {question.options.map((opt) => (
+        <OptionRow
+          key={opt.label}
+          multi={multi}
+          questionName={question.question}
+          selected={selected.includes(opt.label)}
+          onToggle={() => onToggle(opt.label)}
+          label={opt.label}
+          description={opt.description}
+        />
+      ))}
+      <OptionRow
         multi={multi}
         questionName={question.question}
         selected={selected.includes(OTHER_KEY)}
-        text={otherText}
         onToggle={() => onToggle(OTHER_KEY)}
-        onChange={onOtherChange}
-      />
+        label="Other"
+      >
+        {selected.includes(OTHER_KEY) && (
+          <input
+            type="text"
+            value={otherText}
+            onChange={(e) => onOtherChange(e.target.value)}
+            placeholder="Type your answer"
+            className={`${inputCompactClass} mt-1.5`}
+            autoFocus
+          />
+        )}
+      </OptionRow>
     </fieldset>
   )
 }
 
-function OtherOption({
+function OptionRow({
   multi,
   questionName,
   selected,
-  text,
   onToggle,
-  onChange,
+  label,
+  description,
+  children,
 }: {
   multi: boolean
   questionName: string
   selected: boolean
-  text: string
   onToggle: () => void
-  onChange: (text: string) => void
+  label: string
+  description?: string
+  children?: React.ReactNode
 }) {
   return (
     <label
-      className={`flex items-start gap-2 px-2 py-1.5 rounded border text-[11px] cursor-pointer ${
+      className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-ui transition-colors duration-100 ${
         selected
-          ? 'border-indigo-400 bg-indigo-100'
-          : 'border-indigo-200 bg-white hover:bg-indigo-50'
+          ? 'border-accent bg-accent-soft'
+          : 'border-border bg-surface-raised hover:bg-surface-hover'
       }`}
     >
       <input
@@ -236,20 +224,16 @@ function OtherOption({
         name={questionName}
         checked={selected}
         onChange={onToggle}
-        className="mt-0.5 accent-indigo-600"
+        className="mt-0.5 accent-accent"
       />
-      <span className="flex-1 min-w-0">
-        <span className="font-medium text-indigo-900">Other</span>
-        {selected && (
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Type your answer..."
-            className="mt-1 w-full px-2 py-1 text-[11px] border border-indigo-300 rounded bg-white outline-none focus:border-indigo-500"
-            autoFocus
-          />
+      <span className="min-w-0 flex-1">
+        <span className="font-medium text-text">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-xs text-text-muted">
+            {description}
+          </span>
         )}
+        {children}
       </span>
     </label>
   )

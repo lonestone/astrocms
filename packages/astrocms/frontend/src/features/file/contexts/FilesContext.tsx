@@ -7,13 +7,13 @@ import React, {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  MdDriveFileRenameOutline,
-  MdContentCopy,
-  MdDriveFileMoveOutline,
-  MdDeleteOutline,
-  MdNoteAdd,
-  MdCreateNewFolder,
-} from 'react-icons/md'
+  TbArrowsMove,
+  TbCopy,
+  TbFilePlus,
+  TbFolderPlus,
+  TbPencil,
+  TbTrash,
+} from 'react-icons/tb'
 import type { MediaRoot, TreeNode } from '../../../api.js'
 import { parentOf } from '../../common/utils/paths.js'
 import { useTree } from '../../sidebar/hooks/useTree.js'
@@ -65,6 +65,8 @@ export interface CreateFolderOpts {
 
 interface FilesContextValue {
   tree: TreeNode[]
+  /** True until the first tree fetch resolves. */
+  treeLoading: boolean
   invalidateTree: () => void
   /** Invalidate every file-related query (tree + open file contents + git). */
   invalidateFiles: () => void
@@ -142,7 +144,7 @@ function containingFolder(node: TreeNode): string {
 }
 
 export function FilesProvider({ children }: { children: React.ReactNode }) {
-  const { tree, invalidateTree } = useTree()
+  const { tree, isLoading: treeLoading, invalidateTree } = useTree()
   const fileOps = useFileOps()
   const queryClient = useQueryClient()
   const [menu, setMenu] = useState<MenuState>(null)
@@ -211,7 +213,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
         case 'new-file':
           items.push({
             label: 'New file',
-            icon: <MdNoteAdd className="w-3.5 h-3.5" />,
+            icon: <TbFilePlus size={16} />,
             onClick: () =>
               createFile({
                 folderPath: containingFolder(node),
@@ -223,7 +225,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
         case 'new-folder':
           items.push({
             label: 'New folder',
-            icon: <MdCreateNewFolder className="w-3.5 h-3.5" />,
+            icon: <TbFolderPlus size={16} />,
             onClick: () =>
               createFolder({
                 folderPath: containingFolder(node),
@@ -234,7 +236,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
         case 'rename':
           items.push({
             label: 'Rename',
-            icon: <MdDriveFileRenameOutline className="w-3.5 h-3.5" />,
+            icon: <TbPencil size={16} />,
             onClick: () => {
               if (opts?.renameOverride) opts.renameOverride(node)
               else
@@ -245,7 +247,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
         case 'duplicate':
           items.push({
             label: 'Duplicate',
-            icon: <MdContentCopy className="w-3.5 h-3.5" />,
+            icon: <TbCopy size={16} />,
             onClick: () =>
               duplicate(node, {
                 onAfter: opts?.onAfterDuplicate,
@@ -256,7 +258,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
         case 'move':
           items.push({
             label: 'Move',
-            icon: <MdDriveFileMoveOutline className="w-3.5 h-3.5" />,
+            icon: <TbArrowsMove size={16} />,
             onClick: () => move(node, { onAfter: opts?.onAfterMove }),
           })
           break
@@ -264,7 +266,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
           items.push({
             label: 'Delete',
             danger: true,
-            icon: <MdDeleteOutline className="w-3.5 h-3.5" />,
+            icon: <TbTrash size={16} />,
             onClick: () =>
               remove(node, { onAfter: opts?.onAfterDelete, root: opts?.root }),
           })
@@ -354,6 +356,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<FilesContextValue>(
     () => ({
       tree,
+      treeLoading,
       invalidateTree,
       invalidateFiles,
       openMenu,
@@ -366,6 +369,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       tree,
+      treeLoading,
       invalidateTree,
       invalidateFiles,
       openMenu,

@@ -32,6 +32,7 @@ import { InsertComponent } from './InsertComponent.js'
 import { blockDragDropPlugin } from './BlockDragDropPlugin.js'
 import { slashCommandPlugin } from './SlashCommandPlugin.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
+import { codeMirrorTheme } from '../utils/codeMirrorTheme.js'
 import type { MediaRootDirs } from '../../common/utils/mediaRoots.js'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
@@ -82,7 +83,10 @@ export function createPlugins({
 
     markdownShortcutPlugin(),
     codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
-    codeMirrorPlugin({ codeBlockLanguages }),
+    codeMirrorPlugin({
+      codeBlockLanguages,
+      codeMirrorExtensions: [codeMirrorTheme],
+    }),
     jsxPlugin({ jsxComponentDescriptors: jsxDescriptors }),
     blockDragDropPlugin(),
     slashCommandPlugin(),

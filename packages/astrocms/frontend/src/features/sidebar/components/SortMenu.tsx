@@ -1,12 +1,17 @@
-import React, { useEffect, useRef } from 'react'
-import { MdArrowUpward, MdArrowDownward, MdCheck } from 'react-icons/md'
+import React from 'react'
+import {
+  TbCheck,
+  TbSortAscending,
+  TbSortDescending,
+} from 'react-icons/tb'
 import type { FrontmatterFieldSchema } from '../../../api.js'
-import { DEFAULT_SORT, type FolderSort } from '../hooks/useFolderSort.js'
+import { type FolderSort } from '../hooks/useFolderSort.js'
 import {
   FILENAME_FIELD,
   flatSelectableFields,
   isDateLikeField,
 } from '../utils/collectionDefaults.js'
+import { Menu, MenuLabel, MenuSeparator } from '../../common/components/Menu.js'
 
 interface Props {
   x: number
@@ -40,6 +45,9 @@ function buildOptions(
   return [...base, ...fields]
 }
 
+const rowClass =
+  'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left cursor-pointer text-ui text-text transition-colors duration-100 hover:bg-surface-hover'
+
 export function SortMenu({
   x,
   y,
@@ -50,43 +58,19 @@ export function SortMenu({
   onChangeName,
   onClose,
 }: Props) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [onClose])
-
   const options = buildOptions(schema)
-
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1000
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 1000
-  const menuW = 240
-  const headerRowH = 22
-  const optionRowH = 28
-  const menuH = headerRowH * 2 + optionRowH * options.length * 2 + 16
-  const left = Math.min(x, vw - menuW - 8)
-  const top = Math.min(y, vh - menuH - 8)
+  const rowH = 28
+  const estimatedHeight = 24 * 2 + rowH * options.length * 2 + 24
 
   return (
-    <div
-      ref={ref}
-      className="fixed z-9999 bg-white border border-border rounded-md shadow-lg py-1 text-xs"
-      style={{ left, top, width: menuW }}
+    <Menu
+      x={x}
+      y={y}
+      width={240}
+      estimatedHeight={estimatedHeight}
+      onClose={onClose}
     >
-      <div className="px-2 pt-1 pb-0.5 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-        Sort by
-      </div>
+      <MenuLabel>Sort by</MenuLabel>
       {options.map((opt) => {
         const isActive = currentSort.field === opt.field
         const cycleFromRow = () => {
@@ -110,7 +94,7 @@ export function SortMenu({
         return (
           <div
             key={`sort-${opt.field}`}
-            role="button"
+            role="menuitem"
             tabIndex={0}
             onClick={cycleFromRow}
             onKeyDown={(e) => {
@@ -119,19 +103,13 @@ export function SortMenu({
                 cycleFromRow()
               }
             }}
-            className={`flex items-center justify-between px-2 py-1 gap-1 cursor-pointer hover:bg-bg-main ${
-              isActive ? 'bg-bg-main' : ''
-            }`}
+            className={`${rowClass} ${isActive ? 'bg-surface-hover' : ''}`}
           >
-            <span className="truncate flex items-center gap-1">
-              {isActive ? (
-                <MdCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-              ) : (
-                <span className="w-3.5 shrink-0" />
-              )}
-              {opt.label}
+            <span className="inline-flex w-4 shrink-0 justify-center text-accent-text">
+              {isActive && <TbCheck size={16} />}
             </span>
-            <span className="flex items-center gap-0.5 shrink-0">
+            <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+            <span className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
                 onClick={(e) => {
@@ -139,13 +117,14 @@ export function SortMenu({
                   setDir('asc')
                 }}
                 aria-label="Sort ascending"
-                className={`p-0.5 rounded cursor-pointer hover:bg-border ${
+                title="Ascending"
+                className={`rounded p-0.5 cursor-pointer hover:bg-surface-active ${
                   isActive && currentSort.order === 'asc'
-                    ? 'text-primary'
+                    ? 'text-accent-text'
                     : 'text-text-muted'
                 }`}
               >
-                <MdArrowDownward className="w-3.5 h-3.5" />
+                <TbSortAscending size={16} />
               </button>
               <button
                 type="button"
@@ -154,22 +133,21 @@ export function SortMenu({
                   setDir('desc')
                 }}
                 aria-label="Sort descending"
-                className={`p-0.5 rounded cursor-pointer hover:bg-border ${
+                title="Descending"
+                className={`rounded p-0.5 cursor-pointer hover:bg-surface-active ${
                   isActive && currentSort.order === 'desc'
-                    ? 'text-primary'
+                    ? 'text-accent-text'
                     : 'text-text-muted'
                 }`}
               >
-                <MdArrowUpward className="w-3.5 h-3.5" />
+                <TbSortDescending size={16} />
               </button>
             </span>
           </div>
         )
       })}
-      <div className="my-1 border-t border-border" />
-      <div className="px-2 pt-0.5 pb-0.5 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-        Display as
-      </div>
+      <MenuSeparator />
+      <MenuLabel>Display as</MenuLabel>
       {options.map((opt) => {
         const isActive = currentName === opt.field
         const pick = () => {
@@ -179,7 +157,7 @@ export function SortMenu({
         return (
           <div
             key={`name-${opt.field}`}
-            role="button"
+            role="menuitem"
             tabIndex={0}
             onClick={pick}
             onKeyDown={(e) => {
@@ -188,19 +166,15 @@ export function SortMenu({
                 pick()
               }
             }}
-            className={`flex items-center px-2 py-1 gap-1 cursor-pointer hover:bg-bg-main ${
-              isActive ? 'bg-bg-main' : ''
-            }`}
+            className={`${rowClass} ${isActive ? 'bg-surface-hover' : ''}`}
           >
-            {isActive ? (
-              <MdCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-            ) : (
-              <span className="w-3.5 shrink-0" />
-            )}
-            <span className="truncate">{opt.label}</span>
+            <span className="inline-flex w-4 shrink-0 justify-center text-accent-text">
+              {isActive && <TbCheck size={16} />}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{opt.label}</span>
           </div>
         )
       })}
-    </div>
+    </Menu>
   )
 }

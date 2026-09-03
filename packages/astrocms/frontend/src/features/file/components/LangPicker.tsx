@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import * as Flags from 'country-flag-icons/react/3x2'
 import { LANG_TO_COUNTRY, getLangName } from '../../common/utils/langs.js'
+import { Input } from '../../common/components/Input.js'
 
 const FlagComponents = Flags as Record<
   string,
@@ -29,8 +30,8 @@ export function LangPicker({ usedLangs, onSelect }: Props) {
   const firstEnabled = langs.find((l) => !used.has(l))
 
   return (
-    <div>
-      <input
+    <div className="flex flex-col gap-3">
+      <Input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -40,16 +41,16 @@ export function LangPicker({ usedLangs, onSelect }: Props) {
             onSelect(firstEnabled)
           }
         }}
-        placeholder="Search language..."
+        placeholder="Search a language"
+        aria-label="Search a language"
         autoFocus
-        className="block w-full mb-2 px-2 py-1.5 border border-gray-300 rounded text-xs"
       />
       {langs.length === 0 ? (
-        <div className="text-xs text-text-muted py-2 text-center">
+        <div className="py-6 text-center text-xs text-text-muted">
           No language matches
         </div>
       ) : (
-        <div className="grid grid-cols-6 gap-1 max-h-64 overflow-y-auto pr-1">
+        <div className="grid max-h-64 grid-cols-6 gap-1 overflow-y-auto pr-1">
           {langs.map((lang) => {
             const disabled = used.has(lang)
             const country = LANG_TO_COUNTRY[lang]
@@ -63,14 +64,18 @@ export function LangPicker({ usedLangs, onSelect }: Props) {
                 title={`${getLangName(lang)}${
                   disabled ? ' (already used)' : ''
                 }`}
-                className={`flex items-center gap-1 px-1.5 py-1 rounded text-xs leading-none border ${
+                className={`flex h-7 items-center gap-1.5 rounded-md border px-1.5 text-xs leading-none transition-colors duration-100 ${
                   disabled
-                    ? 'border-transparent text-text-muted opacity-30 cursor-not-allowed'
-                    : 'border-border hover:border-primary hover:bg-bg-main cursor-pointer'
+                    ? 'border-transparent text-text-faint cursor-not-allowed'
+                    : 'border-border cursor-pointer hover:border-accent hover:bg-accent-soft'
                 }`}
               >
                 {FlagIcon && (
-                  <FlagIcon className="w-4 h-3 rounded-sm shrink-0" />
+                  <FlagIcon
+                    className={`h-3 w-4 shrink-0 rounded-[2px] ${
+                      disabled ? 'opacity-40' : ''
+                    }`}
+                  />
                 )}
                 <span>{lang}</span>
               </button>

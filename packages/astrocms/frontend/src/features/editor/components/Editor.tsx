@@ -17,6 +17,7 @@ import {
   combineFrontmatterAndBody,
 } from '../../../../../shared/frontmatter.js'
 import React from 'react'
+import { TbAlertTriangle } from 'react-icons/tb'
 import EditorHeader from './EditorHeader.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { useFiles } from '../../file/contexts/FilesContext.js'
@@ -237,7 +238,7 @@ export function Editor({ onSelectFile }: Props) {
     : isLoading || !ready || !plugins
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       <EditorHeader
         isDirty={isDirty}
         isSaving={saveFile.isPending}
@@ -245,16 +246,24 @@ export function Editor({ onSelectFile }: Props) {
         onSelectFile={onSelectFile}
       />
       {schemaError && (
-        <div className="mb-2 px-3 py-2 rounded-md border border-yellow-400 bg-yellow-50 text-sm text-yellow-900">
-          <span className="font-semibold">Schema parsing failed:</span>{' '}
-          {schemaError}
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-text">
+          <TbAlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <span className="font-semibold">Schema parsing failed.</span>{' '}
+            {schemaError}
+          </span>
         </div>
       )}
-      <div className="flex-1 flex flex-col border border-border rounded-md overflow-auto bg-bg -mt-px">
+      <div className="flex flex-1 flex-col overflow-auto rounded-panel border border-border bg-surface-raised shadow-[0_1px_2px_rgb(var(--c-shadow)/0.04)]">
         {error ? (
-          <div className="p-5 text-red-500">File not found: {filePath}</div>
+          <div className="flex flex-col items-center gap-1 px-5 py-16 text-center">
+            <p className="text-sm font-medium text-danger-text">
+              File not found
+            </p>
+            <p className="font-mono text-xs text-text-muted">{filePath}</p>
+          </div>
         ) : loading ? (
-          <div className="p-5 text-text-muted">Loading...</div>
+          <EditorSkeleton />
         ) : (
           <>
             {schema && schema.length > 0 && (
@@ -272,12 +281,42 @@ export function Editor({ onSelectFile }: Props) {
                   onChange={handleBodyChange}
                   contentEditableClassName="mdxeditor-rich-text"
                   plugins={plugins!}
-                  className="flex-1 bg-white"
+                  className="flex-1"
                 />
               </ComponentMetaContext.Provider>
             )}
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+function EditorSkeleton() {
+  return (
+    <div className="flex flex-col" aria-busy="true" aria-label="Loading file">
+      <div className="flex flex-col gap-2.5 border-b border-border bg-surface px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="skeleton h-3 w-20" />
+          <span className="skeleton h-6 flex-1" />
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="skeleton h-3 w-20" />
+          <span className="skeleton h-6 w-1/2" />
+        </div>
+      </div>
+      <div className="flex h-10 items-center gap-2 border-b border-border bg-surface px-3">
+        {[...Array(6)].map((_, i) => (
+          <span key={i} className="skeleton h-5 w-7" />
+        ))}
+      </div>
+      <div className="flex flex-col gap-3 px-8 py-6">
+        <span className="skeleton h-6 w-2/3" />
+        <span className="skeleton h-3.5 w-full" />
+        <span className="skeleton h-3.5 w-11/12" />
+        <span className="skeleton h-3.5 w-4/5" />
+        <span className="mt-3 skeleton h-3.5 w-full" />
+        <span className="skeleton h-3.5 w-3/4" />
       </div>
     </div>
   )

@@ -30,6 +30,7 @@ import {
   realmPlugin,
 } from '@mdxeditor/editor'
 import * as ReactDOM from 'react-dom'
+import { TbChevronRight } from 'react-icons/tb'
 import { ComponentMetaContext } from './CustomJsxEditor.js'
 import { buildDefaultProps } from '../utils/insertComponentUtils.js'
 
@@ -80,12 +81,14 @@ function MenuItem({
       id={'slash-item-' + index}
       onMouseEnter={onMouseEnter}
       onClick={onClick}
-      className={`px-2.5 py-1.5 cursor-pointer text-xs flex items-center justify-between rounded ${
-        isSelected ? 'bg-primary text-white' : 'text-text'
+      className={`flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors duration-100 ${
+        isSelected ? 'bg-surface-hover text-text' : 'text-text-secondary'
       }`}
     >
       <span>{option.title}</span>
-      {option.submenu && <span className="text-2xs opacity-60">▸</span>}
+      {option.submenu && (
+        <TbChevronRight size={15} className="text-text-faint" />
+      )}
     </li>
   )
 }
@@ -295,15 +298,16 @@ function SlashCommandMenu() {
           ? ReactDOM.createPortal(
               <div className="slash-command-menu">
                 {activeSubmenu && (
-                  <div className="px-2.5 pt-1 pb-0.5 text-2xs text-text-muted flex items-center gap-1">
-                    <span
+                  <div className="flex items-center gap-1 px-2 pt-1.5 pb-0.5 text-2xs text-text-muted">
+                    <button
+                      type="button"
                       onClick={() => setActiveSubmenu(null)}
-                      className="cursor-pointer"
+                      className="cursor-pointer rounded px-1 hover:bg-surface-hover hover:text-text"
                     >
-                      /
-                    </span>
-                    <span>▸</span>
-                    <span>{activeSubmenu}</span>
+                      All
+                    </button>
+                    <TbChevronRight size={13} className="text-text-faint" />
+                    <span className="font-medium">{activeSubmenu}</span>
                   </div>
                 )}
                 <ul className="list-none p-1 m-0">
