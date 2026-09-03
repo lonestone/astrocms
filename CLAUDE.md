@@ -2,8 +2,17 @@
 
 - Never read `.env`. You can read `.env.example`.
 - Don't co-author git commits with Claude.
+- Never commit or push without explicit user approval, even for small follow-up fixes. One approval covers one commit, not the whole session.
+- Commit on the current branch. When already on `main` and the user hasn't asked for a branch, commit directly on `main` (don't auto-create a branch).
+- Never use Claude's user/project memory. When asked to remember something, add a minimal instruction here in `CLAUDE.md` (or in the relevant skill under `.claude/skills/`).
 - Use Tailwind CSS for frontend styling. No raw CSS except in styles.css.
 - Every hook and component should have its own file.
+
+## Releasing
+
+- After any change to `packages/astrocms/` is merged into `main`, propose a release: the npm package and the Docker image only ship on a version bump. The Docker workflow (`.github/workflows/docker-publish.yml`) runs on push to `main` and skips when the image for the current version already exists.
+- Release steps, from `packages/astrocms/`, after user approval: `npm version <patch|minor> --no-git-tag-version`, `npm run build` (prepack copies the README only, it doesn't build `dist/`), commit `chore: release X.Y.Z`, tag `vX.Y.Z`, push `main` with tags, then the user runs `npm publish` (needs their npm login). Check the Docker run with `gh run list --workflow docker-publish.yml`.
+- When the release fixes an issue, mention the version in a comment on that issue.
 
 ## Tech stack
 
