@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import type { TreeNode, FrontmatterFieldSchema } from '../../../api.js'
 import { getCollectionFolderPaths } from '../../common/utils/collections.js'
+import { parentOf } from '../../common/utils/paths.js'
 import { useResizablePanel } from '../../common/hooks/useResizablePanel.js'
 import { ResizeHandle } from '../../common/components/ResizeHandle.js'
 import { useCollections } from '../hooks/useCollections.js'
@@ -111,9 +112,7 @@ export function Sidebar({ onSelectFile }: Props) {
       node.type === 'file' &&
       isLocaleFilename(node.name)
     ) {
-      const parent = node.path.includes('/')
-        ? node.path.slice(0, node.path.lastIndexOf('/'))
-        : ''
+      const parent = parentOf(node.path)
       return {
         ext: extOf(node.name),
         usedLangs: usedLangsInFolder(files.tree, parent),
@@ -153,9 +152,7 @@ export function Sidebar({ onSelectFile }: Props) {
       setRenamingPath(null)
       return
     }
-    const parent = node.path.includes('/')
-      ? node.path.slice(0, node.path.lastIndexOf('/'))
-      : ''
+    const parent = parentOf(node.path)
     const to = parent ? `${parent}/${trimmed}` : trimmed
     await fileOps.rename.mutateAsync({ from: node.path, to })
     setRenamingPath(null)

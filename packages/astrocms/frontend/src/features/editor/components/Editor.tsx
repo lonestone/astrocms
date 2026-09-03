@@ -23,6 +23,7 @@ import { useFiles } from '../../file/contexts/FilesContext.js'
 import { getLocaleSiblings } from '../../common/utils/folderTarget.js'
 import { getSchemaForFile } from '../../common/utils/collections.js'
 import { useCollections } from '../../sidebar/hooks/useCollections.js'
+import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import { useSorts } from '../../sidebar/hooks/useFolderSort.js'
 import { useNames } from '../../sidebar/hooks/useFolderName.js'
 import {
@@ -57,6 +58,9 @@ export function Editor({ onSelectFile }: Props) {
   const { data: fileData, isLoading, error } = useFile(filePath)
   const saveFile = useSaveFile()
   const { jsxDescriptors, componentMeta } = useComponents()
+  const publicConfig = usePublicConfig()
+  const mediaDirsRef = useRef(publicConfig)
+  mediaDirsRef.current = publicConfig
 
   // Frontmatter/data and body are managed separately
   const [frontmatter, setFrontmatter] = useState<FrontmatterData>({})
@@ -220,6 +224,7 @@ export function Editor({ onSelectFile }: Props) {
             filePath,
             jsxDescriptors,
             originalContent: originalBody,
+            getMediaDirs: () => mediaDirsRef.current,
           })
         : undefined,
     // Recreate plugins when ready flips to true (with correct originalBody).

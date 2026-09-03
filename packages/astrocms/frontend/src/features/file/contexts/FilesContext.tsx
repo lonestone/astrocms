@@ -14,7 +14,8 @@ import {
   MdNoteAdd,
   MdCreateNewFolder,
 } from 'react-icons/md'
-import type { TreeNode } from '../../../api.js'
+import type { MediaRoot, TreeNode } from '../../../api.js'
+import { parentOf } from '../../common/utils/paths.js'
 import { useTree } from '../../sidebar/hooks/useTree.js'
 import { useFileOps } from '../hooks/useFileOps.js'
 import { ActionsMenu, type ActionItem } from '../components/ActionsMenu.js'
@@ -32,6 +33,8 @@ export type FileActionKind =
 
 export interface OpenMenuOpts {
   actions?: FileActionKind[]
+  /** Root the node belongs to. Only rename and delete support the assets root. */
+  root?: MediaRoot
   extras?: ActionItem[]
   /** If set, replaces the default rename-dialog behavior for the 'rename' action. */
   renameOverride?: (node: TreeNode) => void
@@ -46,6 +49,7 @@ export interface OpenMenuOpts {
 export interface DirectActionOpts {
   onAfter?: (result: string) => void
   langHint?: LangHint
+  root?: MediaRoot
 }
 
 export interface CreateFileOpts {
@@ -94,7 +98,12 @@ type MenuState = {
 } | null
 
 type DialogState =
-  | { kind: 'rename'; node: TreeNode; onAfter?: (newPath: string) => void }
+  | {
+      kind: 'rename'
+      node: TreeNode
+      onAfter?: (newPath: string) => void
+      root?: MediaRoot
+    }
   | {
       kind: 'duplicate'
       node: TreeNode
@@ -102,7 +111,12 @@ type DialogState =
       langHint?: LangHint
     }
   | { kind: 'move'; node: TreeNode; onAfter?: (newPath: string) => void }
-  | { kind: 'delete'; node: TreeNode; onAfter?: (path: string) => void }
+  | {
+      kind: 'delete'
+      node: TreeNode
+      onAfter?: (path: string) => void
+      root?: MediaRoot
+    }
   | {
       kind: 'create-file'
       folderPath: string
@@ -115,10 +129,6 @@ type DialogState =
       onAfter?: (newPath: string) => void
     }
   | null
-
-function parentOf(path: string): string {
-  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-}
 
 function suggestDuplicateName(node: TreeNode): string {
   if (node.type === 'directory') return `${node.name}-copy`
@@ -153,7 +163,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
   )
 
   const rename = useCallback((node: TreeNode, opts?: DirectActionOpts) => {
-    setDialog({ kind: 'rename', node, onAfter: opts?.onAfter })
+    setDialog({ kind: 'rename', node, onAfter: opts?.onAfter, root: opts?.root })
   }, [])
 
   const duplicate = useCallback((node: TreeNode, opts?: DirectActionOpts) => {
@@ -170,7 +180,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const remove = useCallback((node: TreeNode, opts?: DirectActionOpts) => {
-    setDialog({ kind: 'delete', node, onAfter: opts?.onAfter })
+    setDialog({ kind: 'delete', node, onAfter: opts?.onAfter, root: opts?.root })
   }, [])
 
   const createFile = useCallback((opts: CreateFileOpts) => {
@@ -227,7 +237,8 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
             icon: <MdDriveFileRenameOutline className="w-3.5 h-3.5" />,
             onClick: () => {
               if (opts?.renameOverride) opts.renameOverride(node)
-              else rename(node, { onAfter: opts?.onAfterRename })
+              else
+                rename(node, { onAfter: opts?.onAfterRename, root: opts?.root })
             },
           })
           break
@@ -254,7 +265,8 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
             label: 'Delete',
             danger: true,
             icon: <MdDeleteOutline className="w-3.5 h-3.5" />,
-            onClick: () => remove(node, { onAfter: opts?.onAfterDelete }),
+            onClick: () =>
+              remove(node, { onAfter: opts?.onAfterDelete, root: opts?.root }),
           })
           break
       }
@@ -273,7 +285,11 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
     }
     const parent = parentOf(node.path)
     const to = parent ? `${parent}/${trimmed}` : trimmed
-    await fileOps.rename.mutateAsync({ from: node.path, to })
+    await fileOps.rename.mutateAsync({
+      from: node.path,
+      to,
+      root: dialog.root,
+    })
     dialog.onAfter?.(to)
     setDialog(null)
   }
@@ -304,7 +320,7 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
   async function handleDeleteConfirm() {
     if (dialog?.kind !== 'delete') return
     const node = dialog.node
-    await fileOps.remove.mutateAsync({ path: node.path })
+    await fileOps.remove.mutateAsync({ path: node.path, root: dialog.root })
     dialog.onAfter?.(node.path)
     setDialog(null)
   }

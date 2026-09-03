@@ -49,7 +49,14 @@ export async function logout(): Promise<void> {
 
 export interface PublicConfig {
   devServer: boolean
+  /** Content directory, relative to the project root */
+  contentDir: string
+  /** Assets directory, relative to the project root (null when unset) */
+  assetsDir: string | null
 }
+
+/** Directories the CMS can browse: content (always) and assets (optional). */
+export type MediaRoot = 'content' | 'assets'
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {
   const res = await authFetch(`/config`)
@@ -71,14 +78,15 @@ export interface GitFile {
 }
 
 export async function fetchTree(
-  includes: { pattern: string; fields: string[] }[] = []
+  includes: { pattern: string; fields: string[] }[] = [],
+  root: MediaRoot = 'content'
 ): Promise<TreeNode[]> {
-  const qs = includes
-    .map(
-      ({ pattern, fields }) =>
-        `include=${encodeURIComponent(`${pattern}:${fields.join(',')}`)}`
-    )
-    .join('&')
+  const params = includes.map(
+    ({ pattern, fields }) =>
+      `include=${encodeURIComponent(`${pattern}:${fields.join(',')}`)}`
+  )
+  if (root !== 'content') params.push(`root=${root}`)
+  const qs = params.join('&')
   const res = await authFetch(qs ? `/tree?${qs}` : `/tree`)
   return res.json()
 }
@@ -338,12 +346,13 @@ export async function createFile(
 
 export async function renameFile(
   from: string,
-  to: string
+  to: string,
+  root: MediaRoot = 'content'
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
   const res = await authFetch(`/file/rename`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to }),
+    body: JSON.stringify({ from, to, root }),
   })
   return res.json()
 }
@@ -361,12 +370,13 @@ export async function duplicateFile(
 }
 
 export async function deleteFile(
-  path: string
+  path: string,
+  root: MediaRoot = 'content'
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await authFetch(`/file/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, root }),
   })
   return res.json()
 }
@@ -389,11 +399,13 @@ export async function fetchCollections(): Promise<{
 
 export async function uploadMedia(
   file: File,
-  targetDir: string
-): Promise<{ ok: boolean; path: string; name: string }> {
+  targetDir: string,
+  root: MediaRoot = 'content'
+): Promise<{ ok: boolean; path: string; name: string; error?: string }> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('targetDir', targetDir)
+  formData.append('root', root)
   const res = await authFetch(`/upload`, {
     method: 'POST',
     body: formData,

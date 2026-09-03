@@ -1,41 +1,33 @@
+import {
+  DEFAULT_MEDIA_ROOT_DIRS,
+  mediaPreviewUrl,
+  projectPath,
+  splitProjectPath,
+  type MediaRootDirs,
+} from '../../common/utils/mediaRoots.js'
+import { joinPath, normalizePath, parentOf } from '../../common/utils/paths.js'
+
 /**
  * Resolve a relative image source path to a preview URL served by the CMS.
  *
  * - `./image.png` or `image.png` → `/astrocms/content/{dir}/image.png`
- * - `../../../assets/images/foo.png` → resolved and served from `/astrocms/assets/`
+ * - `../../assets/images/foo.png` → served from `/astrocms/assets/` when it
+ *   lands inside the configured assets directory
  * - Absolute or http URLs are returned as-is.
  */
 export function resolvePreviewSrc(
   src: string,
-  filePath: string
+  filePath: string,
+  dirs: MediaRootDirs = DEFAULT_MEDIA_ROOT_DIRS
 ): string | undefined {
   if (!src) return undefined
   if (src.startsWith('/') || src.startsWith('http')) return src
 
-  const dir = filePath.replace(/\/[^/]+$/, '')
-  const name = src.replace(/^\.\//, '')
-  // Build the full path under content/ and resolve . and .. segments
-  const parts = `content/${dir}/${name}`.split('/')
-  const resolved: string[] = []
-  for (const part of parts) {
-    if (part === '.' || part === '') continue
-    if (part === '..') {
-      resolved.pop()
-    } else {
-      resolved.push(part)
-    }
-  }
+  const fileDir = parentOf(projectPath(dirs, 'content', filePath))
+  const resolved = normalizePath(joinPath(fileDir, src))
+  if (resolved === null) return undefined
 
-  const resolvedPath = resolved.join('/')
-
-  if (resolvedPath.startsWith('content/')) {
-    return `/astrocms/${resolvedPath}`
-  }
-
-  if (resolvedPath.startsWith('assets/')) {
-    return `/astrocms/${resolvedPath}`
-  }
-
-  // Path escaped to an unsupported directory
-  return undefined
+  const target = splitProjectPath(dirs, resolved)
+  if (!target) return undefined
+  return mediaPreviewUrl(target.root, target.path)
 }

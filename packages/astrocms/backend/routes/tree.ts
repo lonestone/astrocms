@@ -1,8 +1,7 @@
 import { Hono } from 'hono'
 import { readdir } from 'fs/promises'
 import { join, relative } from 'path'
-import { ROOT_DIR } from '../root.js'
-import { loadConfig } from '../config.js'
+import { parseRoot, resolveRootDir } from '../roots.js'
 import { getFrontmatter, getByPath } from '../parsers/frontmatter.js'
 import { matchGlob } from '../parsers/glob.js'
 
@@ -90,11 +89,17 @@ async function buildTree(
 
 export const treeRoutes = new Hono()
 
+// Lists a root directory. `root` is "content" (default) or "assets".
 treeRoutes.get('/', async (c) => {
-  const config = await loadConfig()
-  const contentRoot = join(ROOT_DIR, config.contentDir)
   const url = new URL(c.req.url)
-  const includes = parseIncludeParams(url.searchParams.getAll('include'))
-  const tree = await buildTree(contentRoot, contentRoot, includes)
+  const root = parseRoot(url.searchParams.get('root'))
+  if (!root) return c.json({ error: 'Invalid root' }, 400)
+  const rootDir = await resolveRootDir(root)
+  if (!rootDir) return c.json({ error: 'Root not configured' }, 404)
+  const includes =
+    root === 'content'
+      ? parseIncludeParams(url.searchParams.getAll('include'))
+      : []
+  const tree = await buildTree(rootDir, rootDir, includes)
   return c.json(tree)
 })

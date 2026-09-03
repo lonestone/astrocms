@@ -1,5 +1,6 @@
 import type { TreeNode } from '../../../api.js'
 import { isSupportedFile, stripExtension } from './supportedFiles.js'
+import { findNode } from './findNode.js'
 
 function hasEditableContent(node: TreeNode): boolean {
   if (node.type === 'file') return isSupportedFile(node.name)
@@ -86,15 +87,4 @@ export function getLocaleSiblings(
       path: f.path,
     }))
     .sort((a, b) => a.lang.localeCompare(b.lang))
-}
-
-function findNode(nodes: TreeNode[], path: string): TreeNode | null {
-  for (const node of nodes) {
-    if (node.path === path) return node
-    if (node.children) {
-      const found = findNode(node.children, path)
-      if (found) return found
-    }
-  }
-  return null
 }
