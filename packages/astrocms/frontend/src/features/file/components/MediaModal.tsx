@@ -8,19 +8,30 @@ import React, {
   useRef,
 } from 'react'
 import { MdMoreHoriz } from 'react-icons/md'
-import { useFiles } from '../contexts/FilesContext.js'
-import { uploadMedia, type TreeNode } from '../../../api.js'
-import Button from '../../common/components/Button.js'
 import { FiUpload } from 'react-icons/fi'
+import { useFiles, type FileActionKind } from '../contexts/FilesContext.js'
+import { useAssetsTree } from '../hooks/useAssetsTree.js'
+import { uploadMedia, type MediaRoot, type TreeNode } from '../../../api.js'
+import Button from '../../common/components/Button.js'
+import { TabBar, type TabItem } from '../../common/components/TabBar.js'
+import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
+import { findNode } from '../../common/utils/findNode.js'
+import {
+  DEFAULT_MEDIA_ROOT_DIRS,
+  mediaPreviewUrl,
+  projectPath,
+} from '../../common/utils/mediaRoots.js'
+import { parentOf, relativePath } from '../../common/utils/paths.js'
 
 // ---------------------------------------------------------------------------
 // Context for opening the media modal from anywhere
 // ---------------------------------------------------------------------------
 
 interface MediaModalRequest {
-  /** Directory to open in, relative to content dir (e.g. "blog/my-post") */
-  initialDir: string
-  /** Path of the MDX file being edited, used to compute relative paths */
+  /**
+   * Path of the file being edited, relative to the content dir. The picker
+   * opens in its folder and selected paths are computed relative to it.
+   */
   filePath: string
   /** Callback with the relative path to the selected media */
   onSelect: (relativePath: string) => void
@@ -68,7 +79,6 @@ export function MediaModalProvider({ children }: ProviderProps) {
       {children}
       {request && (
         <MediaModalOverlay
-          initialDir={request.initialDir}
           filePath={request.filePath}
           onSelect={handleSelect}
           onClose={handleClose}
@@ -84,69 +94,41 @@ export function MediaModalProvider({ children }: ProviderProps) {
 
 const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|svg|webp|avif|ico)$/i
 
-/** Find a subtree node by its path */
-function findNode(nodes: TreeNode[], path: string): TreeNode | undefined {
-  for (const node of nodes) {
-    if (node.path === path) return node
-    if (node.children) {
-      const found = findNode(node.children, path)
-      if (found) return found
-    }
-  }
-  return undefined
-}
-
-/** Compute relative path from a file to a target entry */
-function computeRelativePath(
-  filePath: string,
-  entryPath: string,
-  entryName: string
-): string {
-  const fileDir = filePath.replace(/\/[^/]+$/, '')
-  const entryDir = entryPath.replace(/\/[^/]+$/, '')
-
-  if (fileDir === entryDir) {
-    return `./${entryName}`
-  }
-
-  const fileParts = fileDir.split('/')
-  const entryParts = entryPath.split('/')
-
-  let common = 0
-  while (
-    common < fileParts.length &&
-    common < entryParts.length &&
-    fileParts[common] === entryParts[common]
-  ) {
-    common++
-  }
-
-  const ups = fileParts.length - common
-  const rest = entryParts.slice(common).join('/')
-  const prefix = ups > 0 ? '../'.repeat(ups) : './'
-  return prefix + rest
-}
-
 // ---------------------------------------------------------------------------
 // Modal overlay
 // ---------------------------------------------------------------------------
 
 interface MediaModalOverlayProps {
-  initialDir: string
   filePath: string
   onSelect: (relativePath: string) => void
   onClose: () => void
 }
 
+/** Where the picker currently is: a root and a directory inside it. */
+interface Location {
+  root: MediaRoot
+  dir: string
+}
+
+type TabKey = 'current' | 'content' | 'assets'
+
 function MediaModalOverlay({
-  initialDir,
   filePath,
   onSelect,
   onClose,
 }: MediaModalOverlayProps) {
-  const [currentDir, setCurrentDir] = useState(initialDir)
+  const fileDir = parentOf(filePath)
+  const [{ root, dir: currentDir }, setLocation] = useState<Location>({
+    root: 'content',
+    dir: fileDir,
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { tree, invalidateTree, openMenu } = useFiles()
+  const { tree: contentTree, invalidateTree, openMenu } = useFiles()
+  const config = usePublicConfig()
+  const dirs = config ?? DEFAULT_MEDIA_ROOT_DIRS
+  const assetsEnabled = !!config?.assetsDir
+  const assetsTree = useAssetsTree(assetsEnabled)
+  const tree = root === 'assets' ? assetsTree : contentTree
 
   // Get children for the current directory.
   // An empty currentDir means root (the tree itself).
@@ -168,44 +150,79 @@ function MediaModalOverlay({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const handleNavigate = useCallback((path: string) => {
-    setCurrentDir(path)
-  }, [])
+  const handleNavigate = useCallback(
+    (path: string) => {
+      setLocation({ root, dir: path })
+    },
+    [root]
+  )
 
   const handleParent = useCallback(() => {
-    const parent = currentDir.includes('/')
-      ? currentDir.replace(/\/[^/]+$/, '')
-      : ''
-    setCurrentDir(parent)
-  }, [currentDir])
+    setLocation({ root, dir: parentOf(currentDir) })
+  }, [root, currentDir])
+
+  const tabs = useMemo<TabItem<TabKey>[]>(() => {
+    const items: TabItem<TabKey>[] = [
+      { key: 'current', label: 'Current folder', title: fileDir || '/' },
+      { key: 'content', label: 'Content', title: dirs.contentDir },
+    ]
+    if (assetsEnabled) {
+      items.push({ key: 'assets', label: 'Assets', title: dirs.assetsDir! })
+    }
+    return items
+  }, [fileDir, dirs, assetsEnabled])
+
+  const activeTab: TabKey =
+    root === 'assets' ? 'assets' : currentDir === fileDir ? 'current' : 'content'
+
+  const handleTab = useCallback(
+    (key: TabKey) => {
+      if (key === 'assets') setLocation({ root: 'assets', dir: '' })
+      else if (key === 'current') setLocation({ root: 'content', dir: fileDir })
+      else setLocation({ root: 'content', dir: '' })
+    },
+    [fileDir]
+  )
 
   const handleUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       if (!file) return
-      await uploadMedia(file, currentDir)
+      const result = await uploadMedia(file, currentDir, root)
+      if (!result.ok) {
+        window.alert(result.error ?? 'Upload failed')
+      }
       invalidateTree()
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
-    [currentDir, invalidateTree]
+    [root, currentDir, invalidateTree]
   )
 
   const handleSelectEntry = useCallback(
     (entry: TreeNode) => {
-      onSelect(computeRelativePath(filePath, entry.path, entry.name))
+      onSelect(
+        relativePath(
+          projectPath(dirs, 'content', filePath),
+          projectPath(dirs, root, entry.path)
+        )
+      )
     },
-    [filePath, onSelect]
+    [dirs, root, filePath, onSelect]
   )
 
   function openEntryMenu(entry: TreeNode, x: number, y: number) {
-    openMenu(entry, x, y, { actions: ['rename', 'move', 'delete'] })
+    // Moving relies on the content tree, so the assets root only gets
+    // rename and delete.
+    const actions: FileActionKind[] =
+      root === 'assets' ? ['rename', 'delete'] : ['rename', 'move', 'delete']
+    openMenu(entry, x, y, { actions, root })
   }
 
   const canGoUp = currentDir !== ''
 
-  const previewUrl = (entry: TreeNode) => `/astrocms/content/${entry.path}`
+  const previewUrl = (entry: TreeNode) => mediaPreviewUrl(root, entry.path)
 
-  const breadcrumb = currentDir || '/'
+  const breadcrumb = projectPath(dirs, root, currentDir)
 
   return (
     <div
@@ -245,6 +262,8 @@ function MediaModalOverlay({
             </button>
           </div>
         </div>
+
+        <TabBar tabs={tabs} active={activeTab} onSelect={handleTab} />
 
         {/* Navigation */}
         {canGoUp && (

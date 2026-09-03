@@ -11,6 +11,7 @@ import {
 import { join, dirname, relative, resolve } from 'path'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
+import { parseRoot, resolveRootDir, type MediaRoot } from '../roots.js'
 
 export const fileRoutes = new Hono()
 
@@ -68,9 +69,12 @@ function isValidRelPath(p: unknown): p is string {
   return typeof p === 'string' && p.length > 0 && !p.includes('..')
 }
 
-async function resolveSafe(relPath: string): Promise<string> {
-  const config = await loadConfig()
-  const base = resolve(ROOT_DIR, config.contentDir)
+async function resolveSafe(
+  relPath: string,
+  root: MediaRoot = 'content'
+): Promise<string> {
+  const base = await resolveRootDir(root)
+  if (!base) throw new Error('Root not configured')
   const full = resolve(base, relPath)
   const rel = relative(base, full)
   if (rel.startsWith('..') || resolve(base, rel) !== full) {
@@ -107,15 +111,17 @@ fileRoutes.post('/create', async (c) => {
   }
 })
 
-// Rename / move a file or folder
+// Rename / move a file or folder. `root` is "content" (default) or "assets".
 fileRoutes.post('/rename', async (c) => {
-  const body = await c.req.json<{ from: string; to: string }>()
+  const body = await c.req.json<{ from: string; to: string; root?: string }>()
   if (!isValidRelPath(body.from) || !isValidRelPath(body.to)) {
     return c.json({ error: 'Invalid path' }, 400)
   }
+  const root = parseRoot(body.root)
+  if (!root) return c.json({ error: 'Invalid root' }, 400)
   try {
-    const fromPath = await resolveSafe(body.from)
-    const toPath = await resolveSafe(body.to)
+    const fromPath = await resolveSafe(body.from, root)
+    const toPath = await resolveSafe(body.to, root)
     if (!(await pathExists(fromPath))) {
       return c.json({ error: 'Source not found' }, 404)
     }
@@ -160,14 +166,16 @@ fileRoutes.post('/duplicate', async (c) => {
   }
 })
 
-// Delete a file or folder (recursive)
+// Delete a file or folder (recursive). `root` is "content" (default) or "assets".
 fileRoutes.post('/delete', async (c) => {
-  const body = await c.req.json<{ path: string }>()
+  const body = await c.req.json<{ path: string; root?: string }>()
   if (!isValidRelPath(body.path)) {
     return c.json({ error: 'Invalid path' }, 400)
   }
+  const root = parseRoot(body.root)
+  if (!root) return c.json({ error: 'Invalid root' }, 400)
   try {
-    const fullPath = await resolveSafe(body.path)
+    const fullPath = await resolveSafe(body.path, root)
     if (!(await pathExists(fullPath))) {
       return c.json({ error: 'Not found' }, 404)
     }

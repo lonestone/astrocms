@@ -1,11 +1,10 @@
 import React from 'react'
 import { FiExternalLink } from 'react-icons/fi'
-import { useQuery } from '@tanstack/react-query'
 import Button from './Button.js'
 import { HeaderAgentPrompt } from './HeaderAgentPrompt.js'
 import { HeaderMenu } from './HeaderMenu.js'
 import { useGitStatus } from '../../git/hooks/useGit.js'
-import { fetchPublicConfig } from '../../../api.js'
+import { usePublicConfig } from '../hooks/usePublicConfig.js'
 
 interface Props {
   agentOpen: boolean
@@ -18,11 +17,7 @@ export function Header({
   onToggleAgent,
   onNavigateGit,
 }: Props) {
-  const { data: config } = useQuery({
-    queryKey: ['public-config'],
-    queryFn: fetchPublicConfig,
-    staleTime: Infinity,
-  })
+  const config = usePublicConfig()
   const { data: files = [] } = useGitStatus()
   const changeCount = files.length
 

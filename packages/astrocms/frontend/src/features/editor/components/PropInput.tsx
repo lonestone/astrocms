@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, useState, useEffect } from 'react'
 import type { PropSchema } from '../../../api.js'
 import { useMediaModal } from '../../file/components/MediaModal.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
+import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import Button from '../../common/components/Button.js'
 
@@ -92,18 +93,15 @@ export function ImagePropInput({
   const filePath = useFilePath()!
   const { openMediaModal } = useMediaModal()
 
+  const config = usePublicConfig()
+
   const previewSrc = useMemo(
-    () => resolvePreviewSrc(value, filePath),
-    [value, filePath]
+    () => resolvePreviewSrc(value, filePath, config),
+    [value, filePath, config]
   )
 
   const handleSelect = useCallback(() => {
-    const initialDir = filePath.replace(/\/[^/]+$/, '')
-    openMediaModal({
-      initialDir,
-      filePath,
-      onSelect: onChange,
-    })
+    openMediaModal({ filePath, onSelect: onChange })
   }, [filePath, onChange, openMediaModal])
 
   return (

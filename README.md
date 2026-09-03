@@ -17,7 +17,7 @@ AstroCMS edits your Markdown and MDX files directly, manages media assets, commi
 - **Visual MDX editor** with a frontmatter form generated from your Zod collection schemas
 - **File tree browser** for all Astro content collections
 - **Astro component discovery** for inserting your own components into MDX with prop and slot editing
-- **Media upload** to your configured assets directory
+- **Media picker** to browse and upload images next to your content or in your assets directory
 - **Git integration** with status, diff, stage, commit, and push without leaving the browser
 - **Claude Code agent** (optional) for AI-assisted writing and editing
 - **Password protection** for deployed instances
@@ -92,7 +92,7 @@ All fields are optional.
 |---|---|---|
 | `contentDir` | Directory containing your content collections | `src/content` |
 | `contentConfig` | Path to the Zod schema file | `src/content.config.ts` |
-| `assetsDir` | Where uploaded media is written. If unset, uploads are disabled and the directory is never scanned. | *(uploads disabled)* |
+| `assetsDir` | Extra directory the media picker can browse and upload to, shown as an "Assets" tab. Uploads default to the folder of the content being edited. If unset, only `contentDir` is available. | *(content only)* |
 | `componentsDir` | Astro components available in the MDX editor. If unset, component discovery is skipped entirely. | *(components disabled)* |
 
 Any `astrocms.json` field can also be set via environment variable. Env values override the JSON file when both are present. This is useful for Docker deployments where the config lives outside the container image.

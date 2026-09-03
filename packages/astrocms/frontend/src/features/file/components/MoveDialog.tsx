@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { TreeNode } from '../../../api.js'
 import Button from '../../common/components/Button.js'
+import { parentOf } from '../../common/utils/paths.js'
 import { useFiles } from '../contexts/FilesContext.js'
 
 interface Props {
@@ -28,9 +29,7 @@ function collectFolders(
 
 export function MoveDialog({ node, onCancel, onConfirm }: Props) {
   const { tree } = useFiles()
-  const currentParent = node.path.includes('/')
-    ? node.path.slice(0, node.path.lastIndexOf('/'))
-    : ''
+  const currentParent = parentOf(node.path)
 
   const folders = useMemo(() => {
     const isSelfOrDescendant = (path: string) =>

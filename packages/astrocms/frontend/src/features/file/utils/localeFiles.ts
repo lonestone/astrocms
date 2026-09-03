@@ -1,4 +1,6 @@
 import type { TreeNode } from '../../../api.js'
+import { findNode } from '../../common/utils/findNode.js'
+import { parentOf } from '../../common/utils/paths.js'
 
 export function extOf(name: string): string {
   return name.match(/\.[^.]+$/)?.[0] ?? ''
@@ -10,17 +12,6 @@ export function stripExt(name: string): string {
 
 export function isLocaleFilename(name: string): boolean {
   return stripExt(name).length === 2
-}
-
-function findNode(nodes: TreeNode[], path: string): TreeNode | undefined {
-  for (const n of nodes) {
-    if (n.path === path) return n
-    if (n.children) {
-      const found = findNode(n.children, path)
-      if (found) return found
-    }
-  }
-  return undefined
 }
 
 /** 2-char lang codes of sibling files in the given folder (empty = root). */
@@ -47,9 +38,7 @@ export function firstRemainingLocaleSibling(
 ): string | null {
   const deletedName = deletedPath.split('/').pop() ?? ''
   if (!isLocaleFilename(deletedName)) return null
-  const folderPath = deletedPath.includes('/')
-    ? deletedPath.slice(0, deletedPath.lastIndexOf('/'))
-    : ''
+  const folderPath = parentOf(deletedPath)
   const children = folderPath
     ? findNode(tree, folderPath)?.children ?? []
     : tree

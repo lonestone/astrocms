@@ -4,6 +4,7 @@ import {
   renameFile,
   duplicateFile,
   deleteFile,
+  type MediaRoot,
 } from '../../../api.js'
 
 export function useFileOps() {
@@ -30,8 +31,15 @@ export function useFileOps() {
   })
 
   const rename = useMutation({
-    mutationFn: ({ from, to }: { from: string; to: string }) =>
-      throwIfError(renameFile(from, to)),
+    mutationFn: ({
+      from,
+      to,
+      root,
+    }: {
+      from: string
+      to: string
+      root?: MediaRoot
+    }) => throwIfError(renameFile(from, to, root)),
     onSuccess: invalidate,
   })
 
@@ -42,8 +50,8 @@ export function useFileOps() {
   })
 
   const remove = useMutation({
-    mutationFn: ({ path }: { path: string }) =>
-      throwIfError(deleteFile(path)),
+    mutationFn: ({ path, root }: { path: string; root?: MediaRoot }) =>
+      throwIfError(deleteFile(path, root)),
     onSuccess: invalidate,
   })
 

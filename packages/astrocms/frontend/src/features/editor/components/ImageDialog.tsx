@@ -9,6 +9,7 @@ import { useCellValue, usePublisher } from '@mdxeditor/gurx'
 import { useMediaModal } from '../../file/components/MediaModal.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
+import { usePublicConfig } from '../../common/hooks/usePublicConfig.js'
 import Button from '../../common/components/Button.js'
 
 export function CustomImageDialog() {
@@ -18,6 +19,7 @@ export function CustomImageDialog() {
   const saveImage = usePublisher(saveImage$)
   const { openMediaModal } = useMediaModal()
   const filePath = useFilePath()!
+  const config = usePublicConfig()
 
   const [src, setSrc] = useState('')
   const [alt, setAlt] = useState('')
@@ -37,9 +39,7 @@ export function CustomImageDialog() {
   }, [state])
 
   const handleSelectMedia = useCallback(() => {
-    const initialDir = filePath.replace(/\/[^/]+$/, '')
     openMediaModal({
-      initialDir,
       filePath,
       onSelect: (relativePath) => {
         setSrc(relativePath)
@@ -64,7 +64,7 @@ export function CustomImageDialog() {
   if (!isActive) return null
 
   // Resolve preview URL
-  const previewSrc = resolvePreviewSrc(src, filePath)
+  const previewSrc = resolvePreviewSrc(src, filePath, config)
 
   return (
     <div

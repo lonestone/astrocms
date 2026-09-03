@@ -32,6 +32,7 @@ import { InsertComponent } from './InsertComponent.js'
 import { blockDragDropPlugin } from './BlockDragDropPlugin.js'
 import { slashCommandPlugin } from './SlashCommandPlugin.js'
 import { resolvePreviewSrc } from '../utils/resolvePreviewSrc.js'
+import type { MediaRootDirs } from '../../common/utils/mediaRoots.js'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { graphqlLanguageSupport } from 'cm6-graphql'
@@ -54,12 +55,15 @@ interface CreatePluginsParams {
   filePath: string
   jsxDescriptors: JsxComponentDescriptor[]
   originalContent: string
+  /** Read at preview time so a late config load never reinitializes the editor. */
+  getMediaDirs: () => MediaRootDirs | undefined
 }
 
 export function createPlugins({
   filePath,
   jsxDescriptors,
   originalContent,
+  getMediaDirs,
 }: CreatePluginsParams) {
   return [
     headingsPlugin(),
@@ -69,7 +73,7 @@ export function createPlugins({
     imagePlugin({
       ImageDialog: CustomImageDialog,
       imagePreviewHandler: async (src) => {
-        return resolvePreviewSrc(src, filePath) ?? src
+        return resolvePreviewSrc(src, filePath, getMediaDirs()) ?? src
       },
     }),
     tablePlugin(),

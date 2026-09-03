@@ -4,6 +4,7 @@ import { MdMoreHoriz, MdAdd } from 'react-icons/md'
 import LangButton from '../../common/components/LangButton.js'
 import { useFilePath } from '../contexts/FilePathContext.js'
 import { stripExtension } from '../../common/utils/supportedFiles.js'
+import { parentOf } from '../../common/utils/paths.js'
 import { useFiles } from '../../file/contexts/FilesContext.js'
 import {
   extOf,
@@ -32,10 +33,6 @@ function nodeFromPath(path: string): TreeNode {
     name: path.split('/').pop() ?? path,
     type: 'file',
   }
-}
-
-function parentOf(path: string): string {
-  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
 }
 
 export default function EditorHeader({
