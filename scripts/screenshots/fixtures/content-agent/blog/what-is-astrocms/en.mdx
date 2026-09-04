@@ -1,0 +1,30 @@
+---
+title: What is AstroCMS?
+description: A database-free content editor for Astro sites.
+date: 2026-09-04
+---
+
+AstroCMS is a content editor for Astro sites that edits the Markdown and MDX files already in your repository. There is no database to provision, no export step, and no second copy of your content to keep in sync.
+
+## Your repository stays the source of truth
+
+Every collection declared in `content.config.ts` shows up in the file browser. Opening an entry loads the real file from disk, and saving writes it straight back. The frontmatter form is generated from your Zod schema, so the fields an editor sees match exactly what the build expects.
+
+## Git-native publishing
+
+Changes are staged, reviewed as a diff, then committed and pushed from the interface. Publishing is a normal commit on a normal branch, which means history, blame, review and rollback all keep working the way your team already knows.
+
+## An agent that knows the project
+
+The built-in Claude Code agent runs inside the project directory. Ask it to draft a post, translate an entry or restructure a section, and it reads the surrounding files first, then edits them with tools you can watch step by step.
+
+## Getting started
+
+Install the package, point it at your Astro project, and open the editor:
+
+```bash
+npm install astrocms
+npx astrocms
+```
+
+The interface opens on `http://localhost:4001/astrocms`, already reading the collections your site defines.

@@ -57,6 +57,16 @@ npm run dev:frontend  # frontend only
 npm run build         # build the frontend SPA to dist/
 ```
 
+## README screenshots
+
+The four images at the top of the [README](./README.md) are generated, never taken by hand:
+
+```bash
+npm run screenshots
+```
+
+The script in `scripts/screenshots/` seeds `example/` with synthetic blog posts, runs the real backend and frontend, mocks the Claude endpoints in the browser so the agent panel replays a scripted conversation, captures both scenes in light and dark, then removes everything it created. See `.claude/skills/screenshots/SKILL.md` for the options and for how to change what appears on screen.
+
 ## Docker image
 
 For end-user deployments, point users at the published image on GHCR documented in the [README](./README.md#deploying-with-docker). The section below is for hacking on the `Dockerfile` or `entrypoint.sh` locally.

@@ -2,10 +2,12 @@
   "name": "astrocms-monorepo",
   "license": "MIT",
   "scripts": {
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "screenshots": "node scripts/screenshots/capture.mjs"
   },
   "devDependencies": {
-    "patch-package": "^8.0.1"
+    "patch-package": "^8.0.1",
+    "playwright": "^1.62.1"
   },
   "workspaces": [
     "packages/*",

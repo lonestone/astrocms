@@ -1,0 +1,29 @@
+---
+title: Ship faster with MDX
+description: How our editorial team writes, reviews and publishes rich content without leaving the browser.
+date: 2026-08-21
+image: ./thumbnail.jpg
+---
+
+Our content used to live in three places at once: a database for the copy, a folder of images somewhere on a shared drive, and a spreadsheet tracking what was actually online. Moving everything into MDX files next to the code turned publishing into a single, reviewable step.
+
+## One file per story
+
+Each post is a folder holding its text and its images. The frontmatter form is generated from the collection schema, so a missing description or an invalid date shows up while writing instead of at build time.
+
+* Rich text editing with live formatting
+* Frontmatter fields typed by the Zod schema
+* Images uploaded next to the content they belong to
+* Every change staged, reviewed and committed from the interface
+
+![A meadow in full bloom, shot on a spring morning](./meadow.jpg)
+
+## Components inside prose
+
+MDX lets an editor drop a real Astro component into the middle of a paragraph. Callouts, pricing tables and embedded demos all stay part of the article rather than living in a separate template.
+
+> The best editorial tool is the one that disappears once the writing starts.
+
+## What changed for the team
+
+Reviews happen on pull requests, so a post gets the same attention as a code change. Rolling back is a revert. Publishing is a merge. The site rebuilds on its own, and the editorial calendar finally matches what is online.

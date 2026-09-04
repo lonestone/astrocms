@@ -4,6 +4,20 @@ A simple, database-free CMS for [Astro](https://astro.build) static websites wit
 
 AstroCMS edits your Markdown and MDX files directly, manages media assets, commits and pushes to your GitHub repository, and ships with an optional Claude Code integration for AI-assisted authoring.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./astrocms/docs/screenshots/editor-dark.png">
+  <img alt="Editing a blog post in AstroCMS: file tree, frontmatter form generated from the collection schema, and visual MDX editor" src="https://raw.githubusercontent.com/lonestone/astrocms/main/docs/screenshots/editor-light.png">
+</picture>
+
+<p align="center"><em>Editing a blog post: the frontmatter form comes from your Zod schema, the body is real MDX.</em></p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lonestone/astrocms/main/docs/screenshots/agent-dark.png">
+  <img alt="The AstroCMS agent panel writing a blog post, showing its tool calls and the generated entry in the editor" src="https://raw.githubusercontent.com/lonestone/astrocms/main/docs/screenshots/agent-light.png">
+</picture>
+
+<p align="center"><em>Asking the built-in Claude Code agent for a new post, with every tool call visible as it works.</em></p>
+
 ## Why AstroCMS
 
 - **No database.** Your content lives in your repo as Markdown/MDX, and AstroCMS just edits the files.
