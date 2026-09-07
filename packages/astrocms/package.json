@@ -38,6 +38,8 @@
     "dev:server": "tsx watch backend/server.ts",
     "dev:frontend": "vite dev --config frontend/vite.config.ts",
     "build": "vite build --config frontend/vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepack": "cp ../../README.md ./README.md",
     "postpack": "rm -f ./README.md"
   },
@@ -82,7 +84,8 @@
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   },
   "comments": {
     "overrides": "@assistant-ui publishes tightly-coupled packages whose semver ranges allow mutually incompatible combinations (e.g. a newer store drops an export that core still imports). The two direct deps above are pinned exact and these transitive ones are pinned here, so the Docker build's fresh `npm install` (no lockfile) resolves the same known-good tree we test locally."

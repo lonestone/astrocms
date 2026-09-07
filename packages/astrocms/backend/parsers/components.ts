@@ -20,7 +20,7 @@ export interface ComponentDescriptor {
 }
 
 // Parse interface Props from Astro frontmatter using the TypeScript compiler
-function parseProps(frontmatter: string): PropSchema[] {
+export function parseProps(frontmatter: string): PropSchema[] {
   const sourceFile = ts.createSourceFile(
     'props.ts',
     frontmatter,
@@ -115,7 +115,7 @@ function resolveType(
 // Parse slot names from an Astro component source.
 // Detects <slot> tags in the template and Astro.slots.render/has calls in
 // the frontmatter. Empty string "" represents the default (unnamed) slot.
-function parseSlots(source: string): string[] {
+export function parseSlots(source: string): string[] {
   const frontmatter = extractRawFrontmatter(source) ?? ''
   const parts = source.split('---')
   const template = parts.slice(2).join('---')
