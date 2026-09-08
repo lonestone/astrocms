@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { parseProps } from '../../backend/parsers/components.js'
+import {
+  parseProps,
+  parseSlots,
+} from '../../backend/parsers/components.js'
 
 /**
- * Contract and characterization tests for `parseProps`, the function that uses
- * the TypeScript JS compiler API at runtime (ts.createSourceFile & co.).
+ * Contract and characterization tests for the component parser functions:
  *
- * These tests pin the observable behavior of the current implementation so the
- * parser can later be swapped for a different engine (e.g. after moving to
- * TypeScript 7, which no longer ships the JS compiler API) without regressions.
- * They never import `typescript` directly: only the exported contract matters.
+ * - `parseProps` uses the TypeScript JS compiler API at runtime
+ *   (ts.createSourceFile & co.) to read `interface Props` from frontmatter.
+ * - `parseSlots` detects `<slot>` tags in the template and
+ *   `Astro.slots.render/has` calls in the frontmatter via regex.
+ *
+ * These tests pin the observable behavior of the current implementation so
+ * the parser can later be swapped for a different engine (e.g. after moving
+ * to TypeScript 7, which no longer ships the JS compiler API) without
+ * regressions. They never import `typescript` directly: only the exported
+ * contract matters.
  */
 
 const cases = [
@@ -196,5 +204,107 @@ describe('parseProps', () => {
 
   it('P21: never throws on invalid TypeScript', () => {
     expect(() => parseProps('interface Props { a: }')).not.toThrow()
+  })
+})
+
+/**
+ * Slot cases. Each source is a full `.astro` document (frontmatter + template).
+ * The empty string `''` represents the default (unnamed) slot.
+ */
+describe('parseSlots', () => {
+  // S1: no frontmatter, no slot tag
+  it('S1: plain template without slots yields an empty list', () => {
+    expect(parseSlots('<div>hi</div>')).toEqual([])
+  })
+
+  // S2: default slot tag in the template
+  it('S2: <slot /> yields the default slot', () => {
+    const source = '---\ninterface Props {}\n---\n<slot />\n'
+    expect(parseSlots(source)).toEqual([''])
+  })
+
+  // S3: named slot tag
+  it('S3: <slot name="footer" /> yields the named slot', () => {
+    const source = '---\ninterface Props {}\n---\n<slot name="footer" />\n'
+    expect(parseSlots(source)).toEqual(['footer'])
+  })
+
+  // S4: duplicates are dropped, order of first occurrence is kept
+  it('S4: dedupes slots and keeps first-occurrence order', () => {
+    const source =
+      '---\ninterface Props {}\n---\n<slot name="a" /><slot /><slot name="a" />\n'
+    expect(parseSlots(source)).toEqual(['a', ''])
+  })
+
+  // S5: Astro.slots.render in the frontmatter, no tag in the template
+  it('S5: Astro.slots.render in frontmatter is detected', () => {
+    const source = "---\nconst out = Astro.slots.render('footer')\n---\n<div>hi</div>\n"
+    expect(parseSlots(source)).toEqual(['footer'])
+  })
+
+  // S6: Astro.slots.has in the frontmatter
+  it('S6: Astro.slots.has in frontmatter is detected', () => {
+    const source = "---\nconst has = Astro.slots.has('header')\n---\n<div>hi</div>\n"
+    expect(parseSlots(source)).toEqual(['header'])
+  })
+
+  // S7: 'default' is normalized to '' and deduped against <slot />
+  it('S7: render(\'default\') normalizes to the default slot', () => {
+    const source = "---\nAstro.slots.render('default')\n---\n<slot />\n"
+    expect(parseSlots(source)).toEqual([''])
+  })
+
+  // S8: template slots come first, then frontmatter API calls
+  it('S8: template slots are listed before frontmatter API calls', () => {
+    const source = "---\nAstro.slots.render('a')\n---\n<slot name=\"b\" />\n"
+    expect(parseSlots(source)).toEqual(['b', 'a'])
+  })
+
+  // S9: a slot tag string inside the frontmatter is ignored
+  it('S9: <slot> tags in the frontmatter are ignored', () => {
+    const source = "---\nconst s = '<slot name=\"x\" />'\n---\n<div>hi</div>\n"
+    expect(parseSlots(source)).toEqual([])
+  })
+
+  // S10: Astro.slots.render in the template is ignored (no tag present)
+  it('S10: Astro.slots calls in the template are ignored', () => {
+    const source = "---\nconst a = 1\n---\n{Astro.slots.render('x')}\n"
+    expect(parseSlots(source)).toEqual([])
+  })
+
+  // S11a: double-quoted API call in the frontmatter
+  it('S11a: double quotes work for Astro.slots.render', () => {
+    const source = '---\nAstro.slots.render("footer")\n---\n<div>hi</div>\n'
+    expect(parseSlots(source)).toEqual(['footer'])
+  })
+
+  // S11b: closed slot tag in the template (opening tag is what matches)
+  it('S11b: closed <slot name="x">...</slot> tags are detected', () => {
+    const source = '---\ninterface Props {}\n---\n<slot name="x">content</slot>\n'
+    expect(parseSlots(source)).toEqual(['x'])
+  })
+
+  // S12: slot tag with attributes but no name counts as the default slot
+  it('S12: <slot {...rest} /> without a name yields the default slot', () => {
+    const source = '---\ninterface Props {}\n---\n<slot {...rest} />\n'
+    expect(parseSlots(source)).toEqual([''])
+  })
+
+  // S13 (characterization): a `---` line inside the frontmatter truncates
+  // extractRawFrontmatter at the first fence, so an API call after it is
+  // missed. Slot tags in the real template are still found because the split
+  // rejoins everything after the second `---`. Pins current behavior.
+  it('S13: a --- line inside frontmatter hides later API calls', () => {
+    const source =
+      [
+        '---',
+        'const note = `',
+        '---',
+        '`',
+        "Astro.slots.render('x')",
+        '---',
+        '<slot name="y" />',
+      ].join('\n') + '\n'
+    expect(parseSlots(source)).toEqual(['y'])
   })
 })
