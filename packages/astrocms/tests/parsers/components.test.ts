@@ -195,6 +195,57 @@ const cases = [
     fm: 'interface Props {\r\n  title: string\r\n}',
     expected: [{ name: 'title', type: 'string', optional: false }],
   },
+
+  // P23: `export interface Props` is as valid as the bare form. Astro itself
+  // ships components written this way, and the type has to be exported to be
+  // importable from another file.
+  {
+    id: 'P23',
+    fm: 'export interface Props { title: string; count?: number }',
+    expected: [
+      { name: 'title', type: 'string', optional: false },
+      { name: 'count', type: 'number', optional: true },
+    ],
+  },
+
+  // P24: an exported interface is also resolvable as an array element type
+  {
+    id: 'P24',
+    fm: [
+      'export interface Item { label: string }',
+      'export interface Props { items: Item[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [{ name: 'label', type: 'string', optional: false }],
+      },
+    ],
+  },
+
+  // P25: `export default interface Props` wraps the declaration too
+  {
+    id: 'P25',
+    fm: 'export default interface Props { a: string }',
+    expected: [{ name: 'a', type: 'string', optional: false }],
+  },
+
+  // P26: a numeric property name is exposed as a string, like every other name
+  {
+    id: 'P26',
+    fm: 'interface Props { 1: string }',
+    expected: [{ name: '1', type: 'string', optional: false }],
+  },
+
+  // P27: a computed key has no static name to bind a form field to, so it is
+  // skipped and the other members are still parsed
+  {
+    id: 'P27',
+    fm: "const k = 'a'\ninterface Props { [k]: string; b: number }",
+    expected: [{ name: 'b', type: 'number', optional: false }],
+  },
 ]
 
 describe('parseProps', () => {

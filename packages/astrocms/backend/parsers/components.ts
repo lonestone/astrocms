@@ -5,9 +5,11 @@ import type {
   File,
   Identifier,
   Node,
+  Statement,
   StringLiteral,
   TSLiteralType,
   TSInterfaceDeclaration,
+  TSPropertySignature,
 } from '@babel/types'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
@@ -43,8 +45,9 @@ export function parseProps(frontmatter: string): PropSchema[] {
   }
 
   const interfaces = new Map<string, TSInterfaceDeclaration>()
-  for (const node of file.program.body) {
-    if (node.type === 'TSInterfaceDeclaration') {
+  for (const statement of file.program.body) {
+    const node = unwrapExport(statement)
+    if (node?.type === 'TSInterfaceDeclaration') {
       interfaces.set(node.id.name, node)
     }
   }
@@ -52,6 +55,21 @@ export function parseProps(frontmatter: string): PropSchema[] {
   const propsInterface = interfaces.get('Props')
   if (!propsInterface) return []
   return parseMembers(propsInterface, interfaces)
+}
+
+/**
+ * `export interface Props {}` and `export default interface Props {}` wrap the
+ * declaration in an export node, unlike a bare `interface Props {}`. Return the
+ * declaration in both cases so exported interfaces are indexed too.
+ */
+function unwrapExport(statement: Statement): Node | null {
+  if (
+    statement.type === 'ExportNamedDeclaration' ||
+    statement.type === 'ExportDefaultDeclaration'
+  ) {
+    return statement.declaration ?? null
+  }
+  return statement
 }
 
 function isIdentifier(node: Node | null | undefined): node is Identifier {
@@ -62,6 +80,18 @@ function isPropertySignature(node: Node): node is TSPropertySignature {
   return node.type === 'TSPropertySignature'
 }
 
+/**
+ * Name of a property signature, or null when it has no static name a form can
+ * bind to (a computed key such as `[key]: string`).
+ */
+function memberName(member: TSPropertySignature): string | null {
+  const key = member.key
+  if (!member.computed && key.type === 'Identifier') return key.name
+  if (key.type === 'StringLiteral') return key.value
+  if (key.type === 'NumericLiteral') return String(key.value)
+  return null
+}
+
 function isStringLiteralType(node: Node): node is TSLiteralType {
   return node.type === 'TSLiteralType' && node.literal.type === 'StringLiteral'
 }
@@ -70,21 +100,22 @@ function parseMembers(
   node: TSInterfaceDeclaration,
   interfaces: Map<string, TSInterfaceDeclaration>
 ): PropSchema[] {
-  const members = node.body.body.filter(isPropertySignature)
-  return members.map((member) => {
-    const name = isIdentifier(member.key)
-      ? member.key.name
-      : (member.key as StringLiteral).value
+  const props: PropSchema[] = []
+  for (const member of node.body.body.filter(isPropertySignature)) {
+    const name = memberName(member)
+    if (name === null) continue
     const optional = !!member.optional
-    if (!member.typeAnnotation) {
-      return { name, type: 'string' as const, optional }
+    if (member.typeAnnotation) {
+      props.push({
+        name,
+        optional,
+        ...resolveType(member.typeAnnotation.typeAnnotation, interfaces),
+      })
+    } else {
+      props.push({ name, type: 'string', optional })
     }
-    return {
-      name,
-      optional,
-      ...resolveType(member.typeAnnotation.typeAnnotation, interfaces),
-    }
-  })
+  }
+  return props
 }
 
 function resolveType(
