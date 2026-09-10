@@ -1,7 +1,7 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Golden test: runs `scanComponents` against the real example site in this
@@ -44,6 +44,12 @@ const EXPECTED = [
 ]
 
 describe('scanComponents golden (example site)', () => {
+  beforeEach(() => {
+    // Keep the suite hermetic against a developer's own environment: the env
+    // var would override componentsDir from example/astrocms.json.
+    vi.stubEnv('ASTROCMS_COMPONENTS_DIR', '')
+  })
+
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.resetModules()
