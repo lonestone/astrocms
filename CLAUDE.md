@@ -10,8 +10,8 @@
 
 ## Releasing
 
-- After any change to `packages/astrocms/` is merged into `main`, propose a release: the npm package and the Docker image only ship on a version bump. The Docker workflow (`.github/workflows/docker-publish.yml`) runs on push to `main` and skips when the image for the current version already exists.
-- Release steps, from `packages/astrocms/`, after user approval: `npm version <patch|minor> --no-git-tag-version`, `npm run build` (prepack copies the README only, it doesn't build `dist/`), commit `chore: release X.Y.Z`, tag `vX.Y.Z`, push `main` with tags, then the user runs `npm publish` (needs their npm login). Check the Docker run with `gh run list --workflow docker-publish.yml`.
+- After any change to `packages/astrocms/` is merged into `main`, propose a release: the npm package and the Docker image only ship on a version bump. The Docker image is published by the `publish` job of `.github/workflows/ci.yml`, which runs on push to `main` after the `test` job passes and skips when the image for the current version already exists.
+- Release steps, from `packages/astrocms/`, after user approval: `npm version <patch|minor> --no-git-tag-version`, `npm run build` (prepack copies the README only, it doesn't build `dist/`), commit `chore: release X.Y.Z`, tag `vX.Y.Z`, push `main` with tags, then the user runs `npm publish` (needs their npm login). Check the run with `gh run list --workflow ci.yml`.
 - When the release fixes an issue, mention the version in a comment on that issue.
 
 ## Tech stack
