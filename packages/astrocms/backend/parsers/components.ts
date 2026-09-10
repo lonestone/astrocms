@@ -52,7 +52,7 @@ export function parseProps(frontmatter: string): PropSchema[] {
 
   const props = shapes.get('Props')
   if (!props) return []
-  return parseMembers(props, shapes)
+  return parseMembers(props, shapes, new Set(['Props']))
 }
 
 /** Named object shapes declared in the frontmatter, by name. */
@@ -117,7 +117,16 @@ function isStringLiteralType(node: Node): node is TSLiteralType {
   return node.type === 'TSLiteralType' && node.literal.type === 'StringLiteral'
 }
 
-function parseMembers(members: TSTypeElement[], shapes: ShapeMap): PropSchema[] {
+/**
+ * `expanding` holds the names of the shapes on the current expansion path, so
+ * a self-referencing element type such as `interface Item { kids: Item[] }`
+ * stops at a plain json field instead of recursing forever.
+ */
+function parseMembers(
+  members: TSTypeElement[],
+  shapes: ShapeMap,
+  expanding: Set<string>
+): PropSchema[] {
   const props: PropSchema[] = []
   for (const member of members.filter(isPropertySignature)) {
     const name = memberName(member)
@@ -127,7 +136,7 @@ function parseMembers(members: TSTypeElement[], shapes: ShapeMap): PropSchema[] 
       props.push({
         name,
         optional,
-        ...resolveType(member.typeAnnotation.typeAnnotation, shapes),
+        ...resolveType(member.typeAnnotation.typeAnnotation, shapes, expanding),
       })
     } else {
       props.push({ name, type: 'string', optional })
@@ -138,11 +147,12 @@ function parseMembers(members: TSTypeElement[], shapes: ShapeMap): PropSchema[] 
 
 function resolveType(
   typeNode: Node,
-  shapes: ShapeMap
+  shapes: ShapeMap,
+  expanding: Set<string>
 ): Omit<PropSchema, 'name'> {
   // `readonly T[]` is the array type behind a type operator
   if (typeNode.type === 'TSTypeOperator' && typeNode.operator === 'readonly') {
-    return resolveType(typeNode.typeAnnotation, shapes)
+    return resolveType(typeNode.typeAnnotation, shapes, expanding)
   }
 
   // String literal union: 'a' | 'b' | 'c'
@@ -183,15 +193,22 @@ function resolveType(
   if (elementType) {
     // Inline object elements: { label: string }[]
     if (elementType.type === 'TSTypeLiteral') {
-      return { type: 'json', itemSchema: parseMembers(elementType.members, shapes) }
+      return {
+        type: 'json',
+        itemSchema: parseMembers(elementType.members, shapes, expanding),
+      }
     }
     if (
       elementType.type === 'TSTypeReference' &&
       isIdentifier(elementType.typeName)
     ) {
-      const members = shapes.get(elementType.typeName.name)
-      if (members) {
-        return { type: 'json', itemSchema: parseMembers(members, shapes) }
+      const name = elementType.typeName.name
+      const members = shapes.get(name)
+      if (members && !expanding.has(name)) {
+        return {
+          type: 'json',
+          itemSchema: parseMembers(members, shapes, new Set(expanding).add(name)),
+        }
       }
     }
     return { type: 'json' }

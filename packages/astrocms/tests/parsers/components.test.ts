@@ -304,6 +304,79 @@ const cases = [
     ],
   },
 
+  // P31: a self-referencing element type stops at a plain json field instead
+  // of recursing until the stack overflows
+  {
+    id: 'P31',
+    fm: [
+      'interface Item { label: string; children: Item[] }',
+      'interface Props { items: Item[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [
+          { name: 'label', type: 'string', optional: false },
+          { name: 'children', type: 'json', optional: false },
+        ],
+      },
+    ],
+  },
+
+  // P32: mutually recursive element types stop at the shape already being
+  // expanded on the current path
+  {
+    id: 'P32',
+    fm: [
+      'interface A { b: B[] }',
+      'interface B { a: A[]; x: string }',
+      'interface Props { items: A[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [
+          {
+            name: 'b',
+            type: 'json',
+            optional: false,
+            itemSchema: [
+              { name: 'a', type: 'json', optional: false },
+              { name: 'x', type: 'string', optional: false },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  // P33: the guard tracks the expansion path, not every shape ever seen, so
+  // the same interface used by two sibling props still expands in both
+  {
+    id: 'P33',
+    fm: [
+      'interface Item { a: string }',
+      'interface Props { x: Item[]; y: Item[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'x',
+        type: 'json',
+        optional: false,
+        itemSchema: [{ name: 'a', type: 'string', optional: false }],
+      },
+      {
+        name: 'y',
+        type: 'json',
+        optional: false,
+        itemSchema: [{ name: 'a', type: 'string', optional: false }],
+      },
+    ],
+  },
 ]
 
 describe('parseProps', () => {
