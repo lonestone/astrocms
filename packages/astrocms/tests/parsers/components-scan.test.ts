@@ -170,6 +170,23 @@ describe('scanComponents', () => {
     expect(components.some((c) => c.name === 'sub/B')).toBe(false)
   })
 
+  it('C9: a component exporting its Props interface is parsed like a bare one', async () => {
+    const root = await makeRoot({
+      'astrocms.json': JSON.stringify({ componentsDir: 'src/components' }),
+      'src/components/D.astro':
+        '---\nexport interface Props { title: string }\n---\n<h1>{Astro.props.title}</h1>\n',
+    })
+    createdRoots.push(root)
+
+    const components = await scanIn(root)
+
+    expect(components).toContainEqual({
+      name: 'D',
+      props: [{ name: 'title', type: 'string', optional: false }],
+      slots: [],
+    })
+  })
+
   it('C8: name collisions across subdirectories are both kept (characterization)', async () => {
     const root = await makeRoot({
       'astrocms.json': JSON.stringify({ componentsDir: 'src/components' }),
