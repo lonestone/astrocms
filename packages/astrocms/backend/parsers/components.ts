@@ -8,8 +8,8 @@ import type {
   Statement,
   StringLiteral,
   TSLiteralType,
-  TSInterfaceDeclaration,
   TSPropertySignature,
+  TSTypeElement,
 } from '@babel/types'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
@@ -29,8 +29,8 @@ export interface ComponentDescriptor {
   slots: string[]
 }
 
-// Parse interface Props from Astro frontmatter using @babel/parser with the
-// TypeScript plugin. Malformed input is caught and yields no props, so this
+// Parse the Props declaration of an Astro frontmatter using @babel/parser with
+// the TypeScript plugin. Malformed input is caught and yields no props, so this
 // function never throws on invalid frontmatter.
 export function parseProps(frontmatter: string): PropSchema[] {
   let file: File
@@ -44,17 +44,38 @@ export function parseProps(frontmatter: string): PropSchema[] {
     return []
   }
 
-  const interfaces = new Map<string, TSInterfaceDeclaration>()
+  const shapes: ShapeMap = new Map()
   for (const statement of file.program.body) {
-    const node = unwrapExport(statement)
-    if (node?.type === 'TSInterfaceDeclaration') {
-      interfaces.set(node.id.name, node)
-    }
+    const shape = declaredShape(unwrapExport(statement))
+    if (shape) shapes.set(shape.name, shape.members)
   }
 
-  const propsInterface = interfaces.get('Props')
-  if (!propsInterface) return []
-  return parseMembers(propsInterface, interfaces)
+  const props = shapes.get('Props')
+  if (!props) return []
+  return parseMembers(props, shapes)
+}
+
+/** Named object shapes declared in the frontmatter, by name. */
+type ShapeMap = Map<string, TSTypeElement[]>
+
+/**
+ * Members of a named object shape. Astro components declare their props
+ * either as `interface Props {}` or as `type Props = {}`; both are indexed
+ * so either form works for Props itself and for array element types.
+ */
+function declaredShape(
+  node: Node | null
+): { name: string; members: TSTypeElement[] } | null {
+  if (node?.type === 'TSInterfaceDeclaration') {
+    return { name: node.id.name, members: node.body.body }
+  }
+  if (
+    node?.type === 'TSTypeAliasDeclaration' &&
+    node.typeAnnotation.type === 'TSTypeLiteral'
+  ) {
+    return { name: node.id.name, members: node.typeAnnotation.members }
+  }
+  return null
 }
 
 /**
@@ -96,12 +117,9 @@ function isStringLiteralType(node: Node): node is TSLiteralType {
   return node.type === 'TSLiteralType' && node.literal.type === 'StringLiteral'
 }
 
-function parseMembers(
-  node: TSInterfaceDeclaration,
-  interfaces: Map<string, TSInterfaceDeclaration>
-): PropSchema[] {
+function parseMembers(members: TSTypeElement[], shapes: ShapeMap): PropSchema[] {
   const props: PropSchema[] = []
-  for (const member of node.body.body.filter(isPropertySignature)) {
+  for (const member of members.filter(isPropertySignature)) {
     const name = memberName(member)
     if (name === null) continue
     const optional = !!member.optional
@@ -109,7 +127,7 @@ function parseMembers(
       props.push({
         name,
         optional,
-        ...resolveType(member.typeAnnotation.typeAnnotation, interfaces),
+        ...resolveType(member.typeAnnotation.typeAnnotation, shapes),
       })
     } else {
       props.push({ name, type: 'string', optional })
@@ -120,8 +138,13 @@ function parseMembers(
 
 function resolveType(
   typeNode: Node,
-  interfaces: Map<string, TSInterfaceDeclaration>
+  shapes: ShapeMap
 ): Omit<PropSchema, 'name'> {
+  // `readonly T[]` is the array type behind a type operator
+  if (typeNode.type === 'TSTypeOperator' && typeNode.operator === 'readonly') {
+    return resolveType(typeNode.typeAnnotation, shapes)
+  }
+
   // String literal union: 'a' | 'b' | 'c'
   if (typeNode.type === 'TSUnionType') {
     const allStringLiterals = typeNode.types.every(isStringLiteralType)
@@ -158,16 +181,17 @@ function resolveType(
   }
 
   if (elementType) {
+    // Inline object elements: { label: string }[]
+    if (elementType.type === 'TSTypeLiteral') {
+      return { type: 'json', itemSchema: parseMembers(elementType.members, shapes) }
+    }
     if (
       elementType.type === 'TSTypeReference' &&
       isIdentifier(elementType.typeName)
     ) {
-      const refInterface = interfaces.get(elementType.typeName.name)
-      if (refInterface) {
-        return {
-          type: 'json',
-          itemSchema: parseMembers(refInterface, interfaces),
-        }
+      const members = shapes.get(elementType.typeName.name)
+      if (members) {
+        return { type: 'json', itemSchema: parseMembers(members, shapes) }
       }
     }
     return { type: 'json' }

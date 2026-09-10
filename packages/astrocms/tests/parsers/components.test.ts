@@ -8,7 +8,7 @@ import {
  * Contract and characterization tests for the component parser functions:
  *
  * - `parseProps` uses @babel/parser with the TypeScript plugin at runtime to
- *   read `interface Props` from frontmatter.
+ *   read the Props declaration (interface or type alias) from frontmatter.
  * - `parseSlots` detects `<slot>` tags in the template and
  *   `Astro.slots.render/has` calls in the frontmatter via regex.
  *
@@ -177,8 +177,12 @@ const cases = [
     expected: [{ name: 'b', type: 'number', optional: false }],
   },
 
-  // P20: a type alias named Props is not an interface declaration
-  { id: 'P20', fm: 'type Props = { a: string }', expected: [] },
+  // P20: a type alias is an equally valid way to declare Props
+  {
+    id: 'P20',
+    fm: 'type Props = { a: string }',
+    expected: [{ name: 'a', type: 'string', optional: false }],
+  },
 
   // P21 (characterization): invalid TS must not throw. Babel rejects `a:`
   // without a type even with errorRecovery, so parseProps catches the error
@@ -246,6 +250,60 @@ const cases = [
     fm: "const k = 'a'\ninterface Props { [k]: string; b: number }",
     expected: [{ name: 'b', type: 'number', optional: false }],
   },
+
+  // P28: a type alias resolves as an array element type too, in either
+  // direction between the two declaration forms
+  {
+    id: 'P28',
+    fm: [
+      'type Item = { label: string }',
+      'interface Props { items: Item[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [{ name: 'label', type: 'string', optional: false }],
+      },
+    ],
+  },
+
+  // P29: an inline object element type yields its itemSchema without needing
+  // a named declaration
+  {
+    id: 'P29',
+    fm: 'interface Props { items: { label: string; count?: number }[] }',
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [
+          { name: 'label', type: 'string', optional: false },
+          { name: 'count', type: 'number', optional: true },
+        ],
+      },
+    ],
+  },
+
+  // P30: `readonly T[]` behaves like `T[]`
+  {
+    id: 'P30',
+    fm: [
+      'interface Item { label: string }',
+      'interface Props { items: readonly Item[] }',
+    ].join('\n'),
+    expected: [
+      {
+        name: 'items',
+        type: 'json',
+        optional: false,
+        itemSchema: [{ name: 'label', type: 'string', optional: false }],
+      },
+    ],
+  },
+
 ]
 
 describe('parseProps', () => {
