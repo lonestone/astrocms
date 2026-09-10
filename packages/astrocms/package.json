@@ -38,12 +38,15 @@
     "dev:server": "tsx watch backend/server.ts",
     "dev:frontend": "vite dev --config frontend/vite.config.ts",
     "build": "vite build --config frontend/vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepack": "cp ../../README.md ./README.md",
     "postpack": "rm -f ./README.md"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.16",
     "@assistant-ui/react-ai-sdk": "1.4.7",
+    "@babel/parser": "^7.29.8",
     "@codemirror/language": "^6.12.4",
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/view": "^6.43.9",
@@ -69,11 +72,11 @@
     "react-router": "^8.3.0",
     "smol-toml": "^1.8.0",
     "tsx": "^4.23.12",
-    "typescript": "^5.8.3",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@babel/types": "^7.29.8",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.2.0",
     "@types/picomatch": "^4.0.3",
@@ -82,7 +85,9 @@
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.2.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   },
   "comments": {
     "overrides": "@assistant-ui publishes tightly-coupled packages whose semver ranges allow mutually incompatible combinations (e.g. a newer store drops an export that core still imports). The two direct deps above are pinned exact and these transitive ones are pinned here, so the Docker build's fresh `npm install` (no lockfile) resolves the same known-good tree we test locally."

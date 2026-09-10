@@ -1,6 +1,16 @@
 import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
-import * as ts from 'typescript'
+import { parse } from '@babel/parser'
+import type {
+  File,
+  Identifier,
+  Node,
+  Statement,
+  StringLiteral,
+  TSLiteralType,
+  TSPropertySignature,
+  TSTypeElement,
+} from '@babel/types'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
 import { extractRawFrontmatter } from '../../shared/frontmatter.js'
@@ -19,90 +29,185 @@ export interface ComponentDescriptor {
   slots: string[]
 }
 
-// Parse interface Props from Astro frontmatter using the TypeScript compiler
-function parseProps(frontmatter: string): PropSchema[] {
-  const sourceFile = ts.createSourceFile(
-    'props.ts',
-    frontmatter,
-    ts.ScriptTarget.Latest,
-    true
-  )
+// Parse the Props declaration of an Astro frontmatter using @babel/parser with
+// the TypeScript plugin. Malformed input is caught and yields no props, so this
+// function never throws on invalid frontmatter.
+export function parseProps(frontmatter: string): PropSchema[] {
+  let file: File
+  try {
+    file = parse(frontmatter, {
+      sourceType: 'module',
+      plugins: ['typescript'],
+      errorRecovery: true,
+    })
+  } catch {
+    return []
+  }
 
-  const interfaces = new Map<string, ts.InterfaceDeclaration>()
-  ts.forEachChild(sourceFile, (node) => {
-    if (ts.isInterfaceDeclaration(node)) {
-      interfaces.set(node.name.text, node)
-    }
-  })
+  const shapes: ShapeMap = new Map()
+  for (const statement of file.program.body) {
+    const shape = declaredShape(unwrapExport(statement))
+    if (shape) shapes.set(shape.name, shape.members)
+  }
 
-  const propsInterface = interfaces.get('Props')
-  if (!propsInterface) return []
-  return parseMembers(propsInterface, interfaces)
+  const props = shapes.get('Props')
+  if (!props) return []
+  return parseMembers(props, shapes, new Set(['Props']))
 }
 
+/** Named object shapes declared in the frontmatter, by name. */
+type ShapeMap = Map<string, TSTypeElement[]>
+
+/**
+ * Members of a named object shape. Astro components declare their props
+ * either as `interface Props {}` or as `type Props = {}`; both are indexed
+ * so either form works for Props itself and for array element types.
+ */
+function declaredShape(
+  node: Node | null
+): { name: string; members: TSTypeElement[] } | null {
+  if (node?.type === 'TSInterfaceDeclaration') {
+    return { name: node.id.name, members: node.body.body }
+  }
+  if (
+    node?.type === 'TSTypeAliasDeclaration' &&
+    node.typeAnnotation.type === 'TSTypeLiteral'
+  ) {
+    return { name: node.id.name, members: node.typeAnnotation.members }
+  }
+  return null
+}
+
+/**
+ * `export interface Props {}` and `export default interface Props {}` wrap the
+ * declaration in an export node, unlike a bare `interface Props {}`. Return the
+ * declaration in both cases so exported interfaces are indexed too.
+ */
+function unwrapExport(statement: Statement): Node | null {
+  if (
+    statement.type === 'ExportNamedDeclaration' ||
+    statement.type === 'ExportDefaultDeclaration'
+  ) {
+    return statement.declaration ?? null
+  }
+  return statement
+}
+
+function isIdentifier(node: Node | null | undefined): node is Identifier {
+  return !!node && node.type === 'Identifier'
+}
+
+function isPropertySignature(node: Node): node is TSPropertySignature {
+  return node.type === 'TSPropertySignature'
+}
+
+/**
+ * Name of a property signature, or null when it has no static name a form can
+ * bind to (a computed key such as `[key]: string`).
+ */
+function memberName(member: TSPropertySignature): string | null {
+  const key = member.key
+  if (!member.computed && key.type === 'Identifier') return key.name
+  if (key.type === 'StringLiteral') return key.value
+  if (key.type === 'NumericLiteral') return String(key.value)
+  return null
+}
+
+function isStringLiteralType(node: Node): node is TSLiteralType {
+  return node.type === 'TSLiteralType' && node.literal.type === 'StringLiteral'
+}
+
+/**
+ * `expanding` holds the names of the shapes on the current expansion path, so
+ * a self-referencing element type such as `interface Item { kids: Item[] }`
+ * stops at a plain json field instead of recursing forever.
+ */
 function parseMembers(
-  node: ts.InterfaceDeclaration,
-  interfaces: Map<string, ts.InterfaceDeclaration>
+  members: TSTypeElement[],
+  shapes: ShapeMap,
+  expanding: Set<string>
 ): PropSchema[] {
-  return node.members.filter(ts.isPropertySignature).map((member) => {
-    const name = (member.name as ts.Identifier).text
-    const optional = !!member.questionToken
-    if (!member.type) return { name, type: 'string' as const, optional }
-    return { name, optional, ...resolveType(member.type, interfaces) }
-  })
+  const props: PropSchema[] = []
+  for (const member of members.filter(isPropertySignature)) {
+    const name = memberName(member)
+    if (name === null) continue
+    const optional = !!member.optional
+    if (member.typeAnnotation) {
+      props.push({
+        name,
+        optional,
+        ...resolveType(member.typeAnnotation.typeAnnotation, shapes, expanding),
+      })
+    } else {
+      props.push({ name, type: 'string', optional })
+    }
+  }
+  return props
 }
 
 function resolveType(
-  typeNode: ts.TypeNode,
-  interfaces: Map<string, ts.InterfaceDeclaration>
+  typeNode: Node,
+  shapes: ShapeMap,
+  expanding: Set<string>
 ): Omit<PropSchema, 'name'> {
+  // `readonly T[]` is the array type behind a type operator
+  if (typeNode.type === 'TSTypeOperator' && typeNode.operator === 'readonly') {
+    return resolveType(typeNode.typeAnnotation, shapes, expanding)
+  }
+
   // String literal union: 'a' | 'b' | 'c'
-  if (ts.isUnionTypeNode(typeNode)) {
-    const allStringLiterals = typeNode.types.every(
-      (t) => ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal)
-    )
+  if (typeNode.type === 'TSUnionType') {
+    const allStringLiterals = typeNode.types.every(isStringLiteralType)
     if (allStringLiterals) {
       const options = typeNode.types.map(
-        (t) => ((t as ts.LiteralTypeNode).literal as ts.StringLiteral).text
+        (t) => ((t as TSLiteralType).literal as StringLiteral).value
       )
       return { type: 'select', options }
     }
   }
 
   if (
-    ts.isTypeReferenceNode(typeNode) &&
-    ts.isIdentifier(typeNode.typeName) &&
-    typeNode.typeName.text === 'ImagePath'
+    typeNode.type === 'TSTypeReference' &&
+    isIdentifier(typeNode.typeName) &&
+    typeNode.typeName.name === 'ImagePath'
   ) {
     return { type: 'image' }
   }
 
-  if (typeNode.kind === ts.SyntaxKind.StringKeyword) return { type: 'string' }
-  if (typeNode.kind === ts.SyntaxKind.NumberKeyword) return { type: 'number' }
-  if (typeNode.kind === ts.SyntaxKind.BooleanKeyword) return { type: 'boolean' }
+  if (typeNode.type === 'TSStringKeyword') return { type: 'string' }
+  if (typeNode.type === 'TSNumberKeyword') return { type: 'number' }
+  if (typeNode.type === 'TSBooleanKeyword') return { type: 'boolean' }
 
-  let elementType: ts.TypeNode | undefined
-  if (ts.isArrayTypeNode(typeNode)) {
+  let elementType: Node | undefined
+  if (typeNode.type === 'TSArrayType') {
     elementType = typeNode.elementType
   } else if (
-    ts.isTypeReferenceNode(typeNode) &&
-    ts.isIdentifier(typeNode.typeName) &&
-    typeNode.typeName.text === 'Array' &&
-    typeNode.typeArguments?.length === 1
+    typeNode.type === 'TSTypeReference' &&
+    isIdentifier(typeNode.typeName) &&
+    typeNode.typeName.name === 'Array' &&
+    typeNode.typeParameters?.params.length === 1
   ) {
-    elementType = typeNode.typeArguments[0]
+    elementType = typeNode.typeParameters.params[0]
   }
 
   if (elementType) {
+    // Inline object elements: { label: string }[]
+    if (elementType.type === 'TSTypeLiteral') {
+      return {
+        type: 'json',
+        itemSchema: parseMembers(elementType.members, shapes, expanding),
+      }
+    }
     if (
-      ts.isTypeReferenceNode(elementType) &&
-      ts.isIdentifier(elementType.typeName)
+      elementType.type === 'TSTypeReference' &&
+      isIdentifier(elementType.typeName)
     ) {
-      const refInterface = interfaces.get(elementType.typeName.text)
-      if (refInterface) {
+      const name = elementType.typeName.name
+      const members = shapes.get(name)
+      if (members && !expanding.has(name)) {
         return {
           type: 'json',
-          itemSchema: parseMembers(refInterface, interfaces),
+          itemSchema: parseMembers(members, shapes, new Set(expanding).add(name)),
         }
       }
     }
@@ -115,7 +220,7 @@ function resolveType(
 // Parse slot names from an Astro component source.
 // Detects <slot> tags in the template and Astro.slots.render/has calls in
 // the frontmatter. Empty string "" represents the default (unnamed) slot.
-function parseSlots(source: string): string[] {
+export function parseSlots(source: string): string[] {
   const frontmatter = extractRawFrontmatter(source) ?? ''
   const parts = source.split('---')
   const template = parts.slice(2).join('---')
