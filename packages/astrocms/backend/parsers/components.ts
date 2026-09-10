@@ -1,6 +1,14 @@
 import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
-import * as ts from 'typescript'
+import { parse } from '@babel/parser'
+import type {
+  File,
+  Identifier,
+  Node,
+  StringLiteral,
+  TSLiteralType,
+  TSInterfaceDeclaration,
+} from '@babel/types'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
 import { extractRawFrontmatter } from '../../shared/frontmatter.js'
@@ -19,86 +27,111 @@ export interface ComponentDescriptor {
   slots: string[]
 }
 
-// Parse interface Props from Astro frontmatter using the TypeScript compiler
+// Parse interface Props from Astro frontmatter using @babel/parser with the
+// TypeScript plugin. Malformed input is caught and yields no props, so this
+// function never throws on invalid frontmatter.
 export function parseProps(frontmatter: string): PropSchema[] {
-  const sourceFile = ts.createSourceFile(
-    'props.ts',
-    frontmatter,
-    ts.ScriptTarget.Latest,
-    true
-  )
+  let file: File
+  try {
+    file = parse(frontmatter, {
+      sourceType: 'module',
+      plugins: ['typescript'],
+      errorRecovery: true,
+    })
+  } catch {
+    return []
+  }
 
-  const interfaces = new Map<string, ts.InterfaceDeclaration>()
-  ts.forEachChild(sourceFile, (node) => {
-    if (ts.isInterfaceDeclaration(node)) {
-      interfaces.set(node.name.text, node)
+  const interfaces = new Map<string, TSInterfaceDeclaration>()
+  for (const node of file.program.body) {
+    if (node.type === 'TSInterfaceDeclaration') {
+      interfaces.set(node.id.name, node)
     }
-  })
+  }
 
   const propsInterface = interfaces.get('Props')
   if (!propsInterface) return []
   return parseMembers(propsInterface, interfaces)
 }
 
+function isIdentifier(node: Node | null | undefined): node is Identifier {
+  return !!node && node.type === 'Identifier'
+}
+
+function isPropertySignature(node: Node): node is TSPropertySignature {
+  return node.type === 'TSPropertySignature'
+}
+
+function isStringLiteralType(node: Node): node is TSLiteralType {
+  return node.type === 'TSLiteralType' && node.literal.type === 'StringLiteral'
+}
+
 function parseMembers(
-  node: ts.InterfaceDeclaration,
-  interfaces: Map<string, ts.InterfaceDeclaration>
+  node: TSInterfaceDeclaration,
+  interfaces: Map<string, TSInterfaceDeclaration>
 ): PropSchema[] {
-  return node.members.filter(ts.isPropertySignature).map((member) => {
-    const name = (member.name as ts.Identifier).text
-    const optional = !!member.questionToken
-    if (!member.type) return { name, type: 'string' as const, optional }
-    return { name, optional, ...resolveType(member.type, interfaces) }
+  const members = node.body.body.filter(isPropertySignature)
+  return members.map((member) => {
+    const name = isIdentifier(member.key)
+      ? member.key.name
+      : (member.key as StringLiteral).value
+    const optional = !!member.optional
+    if (!member.typeAnnotation) {
+      return { name, type: 'string' as const, optional }
+    }
+    return {
+      name,
+      optional,
+      ...resolveType(member.typeAnnotation.typeAnnotation, interfaces),
+    }
   })
 }
 
 function resolveType(
-  typeNode: ts.TypeNode,
-  interfaces: Map<string, ts.InterfaceDeclaration>
+  typeNode: Node,
+  interfaces: Map<string, TSInterfaceDeclaration>
 ): Omit<PropSchema, 'name'> {
   // String literal union: 'a' | 'b' | 'c'
-  if (ts.isUnionTypeNode(typeNode)) {
-    const allStringLiterals = typeNode.types.every(
-      (t) => ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal)
-    )
+  if (typeNode.type === 'TSUnionType') {
+    const allStringLiterals = typeNode.types.every(isStringLiteralType)
     if (allStringLiterals) {
       const options = typeNode.types.map(
-        (t) => ((t as ts.LiteralTypeNode).literal as ts.StringLiteral).text
+        (t) => ((t as TSLiteralType).literal as StringLiteral).value
       )
       return { type: 'select', options }
     }
   }
 
   if (
-    ts.isTypeReferenceNode(typeNode) &&
-    ts.isIdentifier(typeNode.typeName) &&
-    typeNode.typeName.text === 'ImagePath'
+    typeNode.type === 'TSTypeReference' &&
+    isIdentifier(typeNode.typeName) &&
+    typeNode.typeName.name === 'ImagePath'
   ) {
     return { type: 'image' }
   }
 
-  if (typeNode.kind === ts.SyntaxKind.StringKeyword) return { type: 'string' }
-  if (typeNode.kind === ts.SyntaxKind.NumberKeyword) return { type: 'number' }
-  if (typeNode.kind === ts.SyntaxKind.BooleanKeyword) return { type: 'boolean' }
+  if (typeNode.type === 'TSStringKeyword') return { type: 'string' }
+  if (typeNode.type === 'TSNumberKeyword') return { type: 'number' }
+  if (typeNode.type === 'TSBooleanKeyword') return { type: 'boolean' }
 
-  let elementType: ts.TypeNode | undefined
-  if (ts.isArrayTypeNode(typeNode)) {
+  let elementType: Node | undefined
+  if (typeNode.type === 'TSArrayType') {
     elementType = typeNode.elementType
   } else if (
-    ts.isTypeReferenceNode(typeNode) &&
-    ts.isIdentifier(typeNode.typeName) &&
-    typeNode.typeName.text === 'Array' &&
-    typeNode.typeArguments?.length === 1
+    typeNode.type === 'TSTypeReference' &&
+    isIdentifier(typeNode.typeName) &&
+    typeNode.typeName.name === 'Array' &&
+    typeNode.typeParameters?.params.length === 1
   ) {
-    elementType = typeNode.typeArguments[0]
+    elementType = typeNode.typeParameters.params[0]
   }
 
   if (elementType) {
     if (
-      ts.isTypeReferenceNode(elementType) &&
-      ts.isIdentifier(elementType.typeName)
+      elementType.type === 'TSTypeReference' &&
+      isIdentifier(elementType.typeName)
     ) {
-      const refInterface = interfaces.get(elementType.typeName.text)
+      const refInterface = interfaces.get(elementType.typeName.name)
       if (refInterface) {
         return {
           type: 'json',

@@ -7,16 +7,15 @@ import {
 /**
  * Contract and characterization tests for the component parser functions:
  *
- * - `parseProps` uses the TypeScript JS compiler API at runtime
- *   (ts.createSourceFile & co.) to read `interface Props` from frontmatter.
+ * - `parseProps` uses @babel/parser with the TypeScript plugin at runtime to
+ *   read `interface Props` from frontmatter.
  * - `parseSlots` detects `<slot>` tags in the template and
  *   `Astro.slots.render/has` calls in the frontmatter via regex.
  *
- * These tests pin the observable behavior of the current implementation so
- * the parser can later be swapped for a different engine (e.g. after moving
- * to TypeScript 7, which no longer ships the JS compiler API) without
- * regressions. They never import `typescript` directly: only the exported
- * contract matters.
+ * These tests pin the observable behavior of the parser so engine swaps do
+ * not cause regressions. The original implementation used the TypeScript JS
+ * compiler API, which is not available in TypeScript 7; the tests never
+ * import a parser engine directly: only the exported contract matters.
  */
 
 const cases = [
@@ -138,7 +137,7 @@ const cases = [
   },
 
   // P15 (characterization): property without a type annotation falls back to
-  // string. Pins the error-recovery shape of createSourceFile.
+  // string. Pins Babel's errorRecovery behavior for this input.
   {
     id: 'P15',
     fm: 'interface Props { foo; }',
@@ -181,12 +180,13 @@ const cases = [
   // P20: a type alias named Props is not an interface declaration
   { id: 'P20', fm: 'type Props = { a: string }', expected: [] },
 
-  // P21 (characterization): invalid TS is recovered best-effort by the parser
-  // and must not throw. Pins the current recovery result for `a:` without type.
+  // P21 (characterization): invalid TS must not throw. Babel rejects `a:`
+  // without a type even with errorRecovery, so parseProps catches the error
+  // and returns no props (the TS compiler used to recover this best-effort).
   {
     id: 'P21',
     fm: 'interface Props { a: }',
-    expected: [{ name: 'a', type: 'string', optional: false }],
+    expected: [],
   },
 
   // P22: CRLF line endings behave like LF
