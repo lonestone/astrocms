@@ -4,6 +4,7 @@ import { promisify } from 'util'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from '../root.js'
+import { loadConfig, type GitConfig } from '../config.js'
 
 const exec = promisify(execFile)
 
@@ -39,6 +40,19 @@ function getBranch() {
   return process.env.GIT_BRANCH || 'main'
 }
 
+async function getGitSettings(): Promise<GitConfig> {
+  const config = await loadConfig()
+  return config.git
+}
+
+/**
+ * The branch HEAD is currently on. Empty string on a detached HEAD.
+ */
+async function getCurrentBranch(): Promise<string> {
+  const out = await git('branch', '--show-current')
+  return out.trim()
+}
+
 async function ensureAuthedRemote() {
   const pat = process.env.GIT_PAT
   const repoUrl = process.env.GIT_REPO_URL
@@ -56,14 +70,30 @@ async function isWorktreeClean(): Promise<boolean> {
   return status.trim().length === 0
 }
 
-async function countBehind(): Promise<number> {
-  const branch = getBranch()
+async function countCommits(range: string): Promise<number> {
   try {
-    const out = await git('rev-list', '--count', `HEAD..origin/${branch}`)
+    const out = await git('rev-list', '--count', range)
     const n = parseInt(out.trim(), 10)
     return Number.isFinite(n) ? n : 0
   } catch {
     return 0
+  }
+}
+
+async function countBehind(branch: string): Promise<number> {
+  return countCommits(`HEAD..origin/${branch}`)
+}
+
+/**
+ * Fetch one branch from origin. Returns false when the branch does not exist
+ * on the remote yet (e.g. a working branch that was never pushed).
+ */
+async function fetchBranch(branch: string): Promise<boolean> {
+  try {
+    await git('fetch', 'origin', branch)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -75,6 +105,8 @@ interface RemoteState {
   lastCheckedAt: number | null
   lastPulledAt: number | null
   error?: string
+  aheadOfBase: number
+  behindBase: number
 }
 
 const remoteState: RemoteState = {
@@ -82,30 +114,72 @@ const remoteState: RemoteState = {
   behind: 0,
   lastCheckedAt: null,
   lastPulledAt: null,
+  aheadOfBase: 0,
+  behindBase: 0,
+}
+
+/**
+ * Sync the working branch with its remote ref when it is behind and the
+ * worktree is clean (ff-only). Shared by both modes.
+ */
+async function syncWorkingBranch(branch: string): Promise<void> {
+  const behind = await countBehind(branch)
+  if (behind > 0) {
+    const clean = await isWorktreeClean()
+    if (clean) {
+      await git('pull', '--ff-only', 'origin', branch)
+      remoteState.behind = 0
+      remoteState.updateAvailable = false
+      remoteState.lastPulledAt = Date.now()
+    } else {
+      remoteState.behind = behind
+      remoteState.updateAvailable = true
+    }
+  } else {
+    remoteState.behind = 0
+    remoteState.updateAvailable = false
+  }
 }
 
 async function checkRemote(): Promise<void> {
   try {
+    const settings = await getGitSettings()
     await ensureAuthedRemote()
-    await git('fetch', 'origin', getBranch())
-    const behind = await countBehind()
-    remoteState.lastCheckedAt = Date.now()
-    remoteState.error = undefined
-    if (behind > 0) {
-      const clean = await isWorktreeClean()
-      if (clean) {
-        await git('pull', '--ff-only', 'origin', getBranch())
+
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+
+      // The base branch must exist on the remote; a failure here is a real
+      // error and lands in remoteState.error.
+      await git('fetch', 'origin', settings.baseBranch)
+      remoteState.behindBase = await countCommits(
+        `HEAD..origin/${settings.baseBranch}`
+      )
+      remoteState.aheadOfBase = await countCommits(
+        `origin/${settings.baseBranch}..HEAD`
+      )
+
+      if (current && current !== settings.baseBranch) {
+        // The working branch may not exist on the remote yet.
+        if (await fetchBranch(current)) {
+          await syncWorkingBranch(current)
+        } else {
+          remoteState.behind = 0
+          remoteState.updateAvailable = false
+        }
+      } else {
+        // On the base branch: no working-branch ref to sync.
         remoteState.behind = 0
         remoteState.updateAvailable = false
-        remoteState.lastPulledAt = Date.now()
-      } else {
-        remoteState.behind = behind
-        remoteState.updateAvailable = true
       }
     } else {
-      remoteState.behind = 0
-      remoteState.updateAvailable = false
+      const branch = getBranch()
+      await git('fetch', 'origin', branch)
+      await syncWorkingBranch(branch)
     }
+
+    remoteState.lastCheckedAt = Date.now()
+    remoteState.error = undefined
   } catch (err) {
     remoteState.error = String((err as any)?.message ?? err)
     remoteState.lastCheckedAt = Date.now()
@@ -174,6 +248,21 @@ function parsePorcelainZ(raw: string): PorcelainEntry[] {
   return out
 }
 
+/**
+ * Git + PR state for the review UI, present in `/status` when PR-based edits
+ * are enabled. `openPr` is filled by the GitHub client (see
+ * docs/pr-based-edits.md, phase 3); until then it is always null.
+ */
+interface BranchInfo {
+  prMode: boolean
+  currentBranch: string
+  baseBranch: string
+  onBaseBranch: boolean
+  aheadOfBase: number
+  behindBase: number
+  openPr: null
+}
+
 gitRoutes.get('/status', async (c) => {
   // Piggyback a throttled remote check on the most-called endpoint. Non
   // blocking: the request returns immediately with whatever we know now;
@@ -199,7 +288,23 @@ gitRoutes.get('/status', async (c) => {
       // Sort by path so the row order stays stable when a file toggles
       // between staged and unstaged (git's native output groups by status).
       .sort((a, b) => a.path.localeCompare(b.path))
-    return c.json({ files, remote: remoteSnapshot() })
+
+    const settings = await getGitSettings()
+    let branch: BranchInfo | undefined
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+      branch = {
+        prMode: true,
+        currentBranch: current,
+        baseBranch: settings.baseBranch,
+        onBaseBranch: current === settings.baseBranch,
+        aheadOfBase: remoteState.aheadOfBase,
+        behindBase: remoteState.behindBase,
+        openPr: null,
+      }
+    }
+
+    return c.json({ files, remote: remoteSnapshot(), ...(branch ? { branch } : {}) })
   } catch (err) {
     return c.json({ error: String(err) }, 500)
   }
@@ -321,13 +426,34 @@ gitRoutes.post('/commit', async (c) => {
     return c.json({ error: 'Missing commit message' }, 400)
   }
 
+  const settings = await getGitSettings()
+  let currentBranch: string | undefined
+  if (settings.prBasedEdits) {
+    currentBranch = await getCurrentBranch()
+    if (!currentBranch) {
+      return c.json(
+        { error: 'Detached HEAD: check out a branch before committing.' },
+        400
+      )
+    }
+    if (currentBranch === settings.baseBranch) {
+      return c.json(
+        {
+          error: `PR-based edits are enabled, so the CMS never commits on '${settings.baseBranch}'. Create a working branch first.`,
+        },
+        400
+      )
+    }
+  }
+
   try {
     const commitOutput = await git('commit', '-m', body.message)
 
     let pushOutput = ''
     if (body.push) {
       await ensureAuthedRemote()
-      pushOutput = await git('push', 'origin', getBranch())
+      const branch = settings.prBasedEdits ? currentBranch! : getBranch()
+      pushOutput = await git('push', 'origin', branch)
     }
 
     return c.json({ ok: true, commit: commitOutput, push: pushOutput })
@@ -350,7 +476,22 @@ gitRoutes.post('/pull', async (c) => {
         400
       )
     }
-    const out = await git('pull', '--ff-only', 'origin', getBranch())
+    const settings = await getGitSettings()
+    let branch = getBranch()
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+      if (!current || current === settings.baseBranch) {
+        return c.json(
+          {
+            ok: false,
+            error: `PR-based edits are enabled; pull a working branch, not '${settings.baseBranch}'.`,
+          },
+          400
+        )
+      }
+      branch = current
+    }
+    const out = await git('pull', '--ff-only', 'origin', branch)
     remoteState.behind = 0
     remoteState.updateAvailable = false
     remoteState.lastPulledAt = Date.now()
