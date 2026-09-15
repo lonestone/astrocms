@@ -227,8 +227,14 @@ standalone site repo).
    review UI can resolve/discard, `updated` flag for no-ops). Both reset the
    remote-check throttle so `/status` re-polls immediately. Tests with a bare
    local origin, including the conflict → discard → commit resolution flow.
-3. **GitHub client + push/PR**: `backend/github.ts`, `POST /git/push` with PR
-   create-or-reuse. Tests against the mock API server.
+3. **GitHub client + push/PR** — done: `backend/github.ts` (fetch-based,
+   injectable API base via `ASTROCMS_GITHUB_API_BASE`, auth reuses `GIT_PAT`),
+   `POST /git/push` (PR-mode only; title is validated *before* pushing when no
+   open PR exists; a successful push followed by a failed PR creation returns
+   502 with `pushed: true`), plus the best-effort open-PR lookup in the
+   throttled `checkRemote()` surfaced as `branch.openPr` / `openPrError` in
+   `/status`. Tests against a local mock GitHub API server; the fixture keeps
+   git fully offline via `url.*.insteadOf` while origin still parses as GitHub.
 4. **Frontend**: branch chip, ahead/behind badges, update button, new-branch
    dialog, push & open PR flow with title input.
 5. **Docs + E2E**: README (config section, `GIT_BRANCH` semantics, PAT
@@ -244,3 +250,7 @@ standalone site repo).
   when the env var is unset, matching the existing `pick()` pattern).
 - Docker entrypoint: no change for now. The container starts on the base
   branch; the UI creates the working branch explicitly.
+- Origin URL for the GitHub API is read from `git config remote.origin.url`
+  rather than `git remote get-url`, which applies `url.*.insteadOf` rewrites
+  that can turn the GitHub origin into a transport/mirror URL (and breaks both
+  the offline test fixture and real setups that rewrite URLs).

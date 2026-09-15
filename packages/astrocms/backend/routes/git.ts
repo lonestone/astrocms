@@ -5,6 +5,12 @@ import { unlink } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig, type GitConfig } from '../config.js'
+import {
+  createPullRequest,
+  findOpenPr,
+  parseRepoFromUrl,
+  type GitHubPr,
+} from '../github.js'
 
 const exec = promisify(execFile)
 
@@ -107,6 +113,8 @@ interface RemoteState {
   error?: string
   aheadOfBase: number
   behindBase: number
+  openPr: GitHubPr | null
+  openPrError?: string
 }
 
 const remoteState: RemoteState = {
@@ -116,6 +124,7 @@ const remoteState: RemoteState = {
   lastPulledAt: null,
   aheadOfBase: 0,
   behindBase: 0,
+  openPr: null,
 }
 
 /**
@@ -171,6 +180,30 @@ async function checkRemote(): Promise<void> {
         // On the base branch: no working-branch ref to sync.
         remoteState.behind = 0
         remoteState.updateAvailable = false
+      }
+
+      // Best-effort open-PR lookup for the working branch. Skipped when the
+      // origin is not a GitHub URL or no PAT is configured; failures land in
+      // openPrError without affecting the git state above.
+      remoteState.openPr = null
+      remoteState.openPrError = undefined
+      if (current && current !== settings.baseBranch) {
+        try {
+          // Read the stored origin URL straight from config: `git remote
+          // get-url` would apply url.*.insteadOf rewrites, which can turn a
+          // GitHub URL into a transport/mirror URL that no longer names the repo.
+          const originUrl = await git('config', '--get', 'remote.origin.url')
+          const parsed = parseRepoFromUrl(originUrl)
+          if (parsed && process.env.GIT_PAT) {
+            remoteState.openPr = await findOpenPr(
+              parsed.owner,
+              parsed.repo,
+              current
+            )
+          }
+        } catch (err) {
+          remoteState.openPrError = String((err as any)?.message ?? err)
+        }
       }
     } else {
       const branch = getBranch()
@@ -260,7 +293,8 @@ interface BranchInfo {
   onBaseBranch: boolean
   aheadOfBase: number
   behindBase: number
-  openPr: null
+  openPr: GitHubPr | null
+  openPrError?: string
 }
 
 gitRoutes.get('/status', async (c) => {
@@ -300,7 +334,10 @@ gitRoutes.get('/status', async (c) => {
         onBaseBranch: current === settings.baseBranch,
         aheadOfBase: remoteState.aheadOfBase,
         behindBase: remoteState.behindBase,
-        openPr: null,
+        openPr: remoteState.openPr,
+        ...(remoteState.openPrError
+          ? { openPrError: remoteState.openPrError }
+          : {}),
       }
     }
 
@@ -618,6 +655,123 @@ gitRoutes.post('/branch/update', async (c) => {
     }
   } catch (err) {
     return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * PR body: the list of files changed on the branch (three-dot diff against
+ * the base, so only this branch's commits count) plus a fixed footer.
+ * `nameStatusOutput` is the output of
+ * `git diff --name-status origin/<base>...HEAD`; renames (R*) carry the new
+ * path as their last field.
+ */
+function buildPrBody(nameStatusOutput: string): string {
+  const lines = nameStatusOutput.split('\n').filter((l) => l.trim())
+  const fileList = lines.length
+    ? lines
+        .map((line) => {
+          const [status, ...paths] = line.split('\t')
+          return `- ${status} ${paths[paths.length - 1]}`
+        })
+        .join('\n')
+    : '- (no file changes)'
+  return `## Changed files\n\n${fileList}\n\n---\nCreated with AstroCMS`
+}
+
+// Push the working branch and open its pull request (or reuse an existing
+// one). PR-based edits only; non-PR mode keeps using /commit?push=true.
+gitRoutes.post('/push', async (c) => {
+  const body = await c.req.json<{ title?: string }>()
+
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  const current = await getCurrentBranch()
+  if (!current) {
+    return c.json(
+      { error: 'Detached HEAD: check out a working branch first.' },
+      400
+    )
+  }
+  if (current === settings.baseBranch) {
+    return c.json(
+      { error: `PR-based edits are enabled, so the CMS never pushes '${settings.baseBranch}'. Push a working branch instead.` },
+      400
+    )
+  }
+
+  try {
+    await ensureAuthedRemote()
+
+    // Resolve the GitHub repository from origin's URL before pushing, so a
+    // missing title or unparseable origin doesn't leave a stray push behind.
+    // Read the stored URL from config (not `git remote get-url`, which applies
+    // url.*.insteadOf rewrites that could hide the GitHub origin).
+    const originUrl = await git('config', '--get', 'remote.origin.url')
+    const parsed = parseRepoFromUrl(originUrl)
+    if (!parsed) {
+      return c.json(
+        { error: 'PR-based edits require a GitHub origin (https://github.com/<owner>/<repo>).' },
+        400
+      )
+    }
+    if (!process.env.GIT_PAT) {
+      return c.json(
+        { error: 'GIT_PAT is required to create pull requests.' },
+        400
+      )
+    }
+
+    const open = await findOpenPr(parsed.owner, parsed.repo, current)
+    if (!open) {
+      const title = (body.title ?? '').trim()
+      if (!title) {
+        return c.json({ error: 'Missing PR title' }, 400)
+      }
+    }
+
+    await git('push', '-u', 'origin', current)
+
+    if (open) {
+      // An open PR already exists: the push is enough.
+      remoteState.lastCheckedAt = null
+      return c.json({ ok: true, pushed: true, pr: open })
+    }
+
+    await git('fetch', 'origin', settings.baseBranch)
+    const changed = await git(
+      'diff',
+      '--name-status',
+      `origin/${settings.baseBranch}...HEAD`
+    )
+
+    try {
+      const pr = await createPullRequest(parsed.owner, parsed.repo, {
+        title: (body.title ?? '').trim(),
+        body: buildPrBody(changed),
+        head: current,
+        base: settings.baseBranch,
+      })
+      remoteState.lastCheckedAt = null
+      return c.json({ ok: true, pushed: true, created: true, pr })
+    } catch (err) {
+      // The push already succeeded; report both facts so the UI can show
+      // that the branch is up while PR creation failed.
+      return c.json(
+        { ok: false, pushed: true, error: String((err as any)?.message ?? err) },
+        502
+      )
+    }
+  } catch (err) {
+    return c.json(
+      { ok: false, pushed: false, error: String((err as any)?.message ?? err) },
+      500
+    )
   }
 })
 

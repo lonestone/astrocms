@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { promisify } from 'util'
@@ -82,6 +83,85 @@ async function advanceOrigin(
   await git(other, 'push', 'origin', branch)
 }
 
+/**
+ * Point the fixture's origin at a GitHub-style URL while keeping all git
+ * operations offline: `url.<local>.insteadOf` makes git transparently rewrite
+ * the GitHub URL to the local bare repo. PR-mode code then sees a parseable
+ * GitHub origin (for the API) while fetch/push hit the local remote.
+ */
+async function setGitHubOrigin(fx: Fixture): Promise<void> {
+  await git(
+    fx.root,
+    'remote',
+    'set-url',
+    'origin',
+    'https://github.com/testowner/testrepo'
+  )
+  await git(
+    fx.root,
+    'config',
+    `url.${fx.origin}.insteadOf`,
+    'https://github.com/testowner/testrepo'
+  )
+}
+
+interface MockGitHub {
+  base: string
+  /** Recorded bodies of POST /repos/.../pulls calls. */
+  createdBodies: any[]
+  /** What GET /repos/.../pulls returns (mutable per test). */
+  pulls: unknown[]
+  /** If set, GET /repos/.../pulls responds with this status. */
+  getStatus?: number
+}
+
+const mockServers: Server[] = []
+
+function startMockGitHub(): Promise<MockGitHub> {
+  const mock: MockGitHub = { base: '', createdBodies: [], pulls: [] }
+  const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url?.startsWith('/repos/testowner/testrepo/pulls')) {
+      const status = mock.getStatus ?? 200
+      res.writeHead(status, { 'content-type': 'application/json' })
+      if (status === 200) res.end(JSON.stringify(mock.pulls))
+      else res.end(JSON.stringify({ message: 'boom' }))
+    } else if (req.method === 'POST' && req.url === '/repos/testowner/testrepo/pulls') {
+      let raw = ''
+      req.on('data', (chunk) => (raw += chunk))
+      req.on('end', () => {
+        const body = JSON.parse(raw)
+        mock.createdBodies.push(body)
+        res.writeHead(201, { 'content-type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            number: 7,
+            title: body.title,
+            html_url: 'https://github.com/testowner/testrepo/pull/7',
+          })
+        )
+      })
+    } else {
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ message: 'Not Found' }))
+    }
+  })
+  mockServers.push(server)
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address() as { port: number }
+      mock.base = `http://127.0.0.1:${address.port}`
+      resolve(mock)
+    })
+  })
+}
+
+/** A PR object as the mock server (and GitHub) would return it. */
+const MOCK_PR = {
+  number: 7,
+  title: 'My PR',
+  html_url: 'https://github.com/testowner/testrepo/pull/7',
+}
+
 type Routes = { request(path: string, init?: RequestInit): Promise<Response> }
 
 let lastApp: Routes | undefined
@@ -140,6 +220,9 @@ afterEach(async () => {
 
 afterAll(async () => {
   await Promise.all(createdDirs.map((d) => rm(d, { recursive: true, force: true })))
+  await Promise.all(
+    mockServers.map((s) => new Promise<void>((r) => s.close(() => r())))
+  )
 })
 
 describe('git routes in PR-based edits mode', () => {
@@ -672,5 +755,173 @@ describe('git routes (existing behavior)', () => {
 
     // Path traversal is rejected.
     expect((await post(app, '/discard', { path: '../outside.txt' })).status).toBe(400)
+  })
+})
+
+describe('git routes: push and PR (PR-based edits)', () => {
+  it('pushes the working branch and creates a PR when none is open', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', { title: 'My PR' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.pushed).toBe(true)
+    expect(body.created).toBe(true)
+    expect(body.pr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+
+    // The branch actually landed on the (local) remote.
+    const refs = await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')
+    expect(refs).toContain('refs/heads/astrocms/test')
+
+    // The PR was created with the right head/base, title and body.
+    expect(mock.createdBodies).toHaveLength(1)
+    const created = mock.createdBodies[0]
+    expect(created.title).toBe('My PR')
+    expect(created.head).toBe('astrocms/test')
+    expect(created.base).toBe('main')
+    expect(created.body).toContain('- M index.md')
+    expect(created.body).toContain('Created with AstroCMS')
+  })
+
+  it('pushes only when an open PR already exists (no title needed)', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.pushed).toBe(true)
+    expect(body.created).toBeUndefined()
+    expect(body.pr.number).toBe(7)
+
+    // No new PR was created.
+    expect(mock.createdBodies).toHaveLength(0)
+
+    const refs = await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')
+    expect(refs).toContain('refs/heads/astrocms/test')
+  })
+
+  it('requires a title when no open PR exists and pushes nothing', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', {})
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('title')
+
+    // Nothing was pushed and no PR was created.
+    expect(await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')).toBe('')
+    expect(mock.createdBodies).toHaveLength(0)
+  })
+
+  it('rejects push on the base branch in PR mode', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/push', { title: 'nope' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('never pushes')
+  })
+
+  it('/push is disabled outside PR mode', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/push', { title: 'nope' })
+    expect(res.status).toBe(400)
+  })
+
+  it('exposes the open PR in /status', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+  })
+
+  it('surfaces a GitHub lookup failure as openPrError', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.getStatus = 500
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr).toBeNull()
+    expect(body.branch.openPrError).toContain('GitHub API 500')
+
+    // The git state itself is unaffected.
+    expect(body.branch.currentBranch).toBe('astrocms/test')
   })
 })
