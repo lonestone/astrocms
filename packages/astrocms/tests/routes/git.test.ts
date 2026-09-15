@@ -301,6 +301,202 @@ describe('git routes in PR-based edits mode', () => {
   })
 })
 
+describe('git routes: branch endpoints (PR-based edits)', () => {
+  it('creates a working branch from the latest base', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    // Advance origin/main so the local main is stale.
+    await advanceOrigin(fx, 'main', 'other.md', 'from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, branch: 'astrocms/test' })
+
+    expect(await git(fx.root, 'branch', '--show-current')).toBe('astrocms/test')
+    // The branch starts from the freshly fetched base, not stale local main.
+    expect(await readFile(join(fx.root, 'other.md'), 'utf-8')).toBe(
+      'from main\n'
+    )
+  })
+
+  it('rejects invalid branch names', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    for (const name of ['', '   ', 'bad name', 'foo..bar', '-leading-dash']) {
+      const res = await post(app, '/branch', { name })
+      expect(res.status).toBe(400)
+    }
+
+    // Nothing was created.
+    expect(
+      await git(fx.root, 'branch', '--list', '--format=%(refname:short)')
+    ).toBe('main')
+  })
+
+  it('rejects the base branch name', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/branch', { name: 'main' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('base branch')
+  })
+
+  it('requires a clean worktree to create a branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# dirty\n')
+
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(400)
+
+    expect(
+      await git(fx.root, 'branch', '--list', '--format=%(refname:short)')
+    ).toBe('main')
+  })
+
+  it('rejects an existing local branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await git(fx.root, 'branch', 'astrocms/test')
+
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(409)
+  })
+
+  it('branch endpoints are disabled outside PR mode', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(
+      400
+    )
+    expect((await post(app, '/branch/update', {})).status).toBe(400)
+  })
+
+  it('update merges the latest base into the working branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'work')
+
+    // A non-conflicting change on origin/main.
+    await advanceOrigin(fx, 'main', 'other.md', 'from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.updated).toBe(true)
+
+    // Still on the working branch, now containing both changes.
+    expect(await git(fx.root, 'branch', '--show-current')).toBe('astrocms/test')
+    expect(await readFile(join(fx.root, 'other.md'), 'utf-8')).toBe(
+      'from main\n'
+    )
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# v2\n')
+  })
+
+  it('update is a no-op when already up to date', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.updated).toBe(false)
+  })
+
+  it('update returns 409 on conflict and leaves the merge in progress', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'work')
+
+    // Conflicting change on origin/main (same file, same lines).
+    await advanceOrigin(fx, 'main', 'index.md', '# from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.ok).toBe(false)
+    expect(body.error.toLowerCase()).toContain('conflict')
+
+    // The merge is left in progress so the user can resolve it.
+    expect(await git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')).not.toBe('')
+
+    // Resolve by discarding the conflicted file (keeps our side), then commit
+    // to conclude the merge.
+    expect((await post(app, '/discard', { path: 'index.md' })).status).toBe(200)
+    expect((await post(app, '/commit', { message: 'resolve' })).status).toBe(200)
+
+    await expect(
+      git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')
+    ).rejects.toThrow()
+
+    // The concluding commit is a merge commit (two parents) and keeps our side.
+    const head = await git(fx.root, 'rev-list', '--parents', '-n', '1', 'HEAD')
+    expect(head.trim().split(/\s+/)).toHaveLength(3)
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# v2\n')
+  })
+
+  it('update refuses to run on the base branch or a detached HEAD', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    // On the base branch.
+    const onBase = await post(app, '/branch/update', {})
+    expect(onBase.status).toBe(400)
+
+    // Detached HEAD.
+    await git(fx.root, 'checkout', '--detach')
+    const detached = await post(app, '/branch/update', {})
+    expect(detached.status).toBe(400)
+  })
+
+  it('update requires a clean worktree', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# dirty\n')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(400)
+
+    // No merge was started.
+    await expect(
+      git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')
+    ).rejects.toThrow()
+  })
+})
+
 describe('git routes (existing behavior)', () => {
   it('auto ff-pulls the configured branch when behind and clean', async () => {
     const fx = await makeFixture(null)

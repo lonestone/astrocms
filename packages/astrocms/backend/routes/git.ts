@@ -501,6 +501,126 @@ gitRoutes.post('/pull', async (c) => {
   }
 })
 
+// Create a working branch from the latest base (PR-based edits only).
+gitRoutes.post('/branch', async (c) => {
+  const body = await c.req.json<{ name?: string }>()
+  const name = (body.name ?? '').trim()
+  if (!name) {
+    return c.json({ error: 'Missing branch name' }, 400)
+  }
+
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  try {
+    // The name is passed as a positional argument to git below, so reject
+    // option-like input up front; check-ref-format rejects the rest.
+    if (name.startsWith('-')) {
+      return c.json({ error: `Invalid branch name '${name}'` }, 400)
+    }
+    try {
+      await git('check-ref-format', '--branch', name)
+    } catch {
+      return c.json({ error: `Invalid branch name '${name}'` }, 400)
+    }
+    if (name === settings.baseBranch) {
+      return c.json(
+        { error: `Cannot create a branch with the base branch name '${settings.baseBranch}'.` },
+        400
+      )
+    }
+
+    const clean = await isWorktreeClean()
+    if (!clean) {
+      return c.json(
+        { ok: false, error: 'Working tree is not clean. Commit or discard changes first.' },
+        400
+      )
+    }
+
+    // Refuse to clobber an existing local branch.
+    try {
+      await git('show-ref', '--verify', '--quiet', `refs/heads/${name}`)
+      return c.json({ error: `Branch '${name}' already exists.` }, 409)
+    } catch {
+      // No such local branch: proceed.
+    }
+
+    await ensureAuthedRemote()
+    // Start from the freshly fetched base so the branch never lags behind.
+    await git('fetch', 'origin', settings.baseBranch)
+    await git('switch', '-c', name, `origin/${settings.baseBranch}`)
+
+    // The branch switch invalidates the cached ahead/behind counts; force a
+    // fresh remote check on the next status poll.
+    remoteState.lastCheckedAt = null
+
+    return c.json({ ok: true, branch: name })
+  } catch (err) {
+    return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
+// Merge the latest base into the current working branch (PR-based edits only).
+gitRoutes.post('/branch/update', async (c) => {
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  try {
+    const current = await getCurrentBranch()
+    if (!current) {
+      return c.json(
+        { error: 'Detached HEAD: check out a working branch first.' },
+        400
+      )
+    }
+    if (current === settings.baseBranch) {
+      return c.json(
+        { error: `You are on the base branch '${settings.baseBranch}'; update a working branch instead.` },
+        400
+      )
+    }
+
+    const clean = await isWorktreeClean()
+    if (!clean) {
+      return c.json(
+        { ok: false, error: 'Working tree is not clean. Commit or discard changes first.' },
+        400
+      )
+    }
+
+    await ensureAuthedRemote()
+    await git('fetch', 'origin', settings.baseBranch)
+
+    // Merge (not rebase): it never rewrites pushed history, so an open PR
+    // doesn't need a force-push. On conflict the merge is left in progress:
+    // the review UI shows the conflicted files, and resolving (or discarding)
+    // them plus a commit concludes the merge.
+    try {
+      const out = await git('merge', `origin/${settings.baseBranch}`)
+      return c.json({ ok: true, updated: !/already up to date/i.test(out) })
+    } catch (err: any) {
+      const message = String(err?.message ?? err)
+      return c.json(
+        { ok: false, error: `Merge conflict while updating from '${settings.baseBranch}': ${message}` },
+        409
+      )
+    }
+  } catch (err) {
+    return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
 // Discard a specific hunk (single @@ block) from the working tree.
 // The hunk comes from `git diff HEAD`, so it can span both staged and
 // unstaged changes. We unstage the file first so the worktree is the

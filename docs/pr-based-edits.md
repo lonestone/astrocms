@@ -217,11 +217,16 @@ standalone site repo).
 
 ## Phases
 
-1. **Config + branch state (backend)**: `git` config block, base/working branch
-   split in `routes/git.ts`, commit/push guards on the base branch, `branch`
-   object in `/status`. Tests: config loading, guards.
-2. **Branch endpoints**: `POST /git/branch`, `POST /git/branch/update`,
-   ahead/behind in the throttled remote check. Tests with a bare local origin.
+1. **Config + branch state (backend)** — done: `git` config block, base/working
+   branch split in `routes/git.ts`, commit/push guards on the base branch,
+   `branch` object in `/status`. Tests: config loading, guards.
+2. **Branch endpoints** — done: `POST /git/branch` (name validated via
+   `check-ref-format`, clean-tree guard, starts from freshly fetched base,
+   409 on existing local branch) and `POST /git/branch/update` (merge of
+   `origin/<base>`, 409 on conflict with the merge left in progress so the
+   review UI can resolve/discard, `updated` flag for no-ops). Both reset the
+   remote-check throttle so `/status` re-polls immediately. Tests with a bare
+   local origin, including the conflict → discard → commit resolution flow.
 3. **GitHub client + push/PR**: `backend/github.ts`, `POST /git/push` with PR
    create-or-reuse. Tests against the mock API server.
 4. **Frontend**: branch chip, ahead/behind badges, update button, new-branch
