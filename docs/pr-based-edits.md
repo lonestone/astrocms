@@ -1,6 +1,6 @@
 # PR-Based Edits (implementation plan)
 
-Status: draft, 2026-09-14. Working document for the "PR-Based Edits" feature; delete or archive once shipped (precedent: component parser test plan).
+Status: implemented, 2026-09-14 (phases 1–5 done; manual E2E checklist below still to run against a throwaway GitHub repo). Working document for the "PR-Based Edits" feature; delete or archive once shipped (precedent: component parser test plan).
 
 ## Goal
 
@@ -202,13 +202,27 @@ Automated (vitest, following the hermetic tmp-root pattern from
   emulates `GET/POST /repos/{owner}/{repo}/pulls`. Covers: open PR exists →
   push only, no PR → create with the given title, missing title → 400.
 
-Manual E2E (checklist in the PR description):
+### Manual E2E checklist (paste into the upstream PR description)
 
-- Scratch project: copy `example/` to a tmp folder, `git init`, add a remote
-  (local bare repo for branch/push logic, or a throwaway GitHub repo + PAT for
-  the full PR flow). Point `ASTROCMS_ROOT` at it and run `astrocms:dev`.
-- Optional full-stack local E2E without GitHub: Gitea in Docker exposes a
-  GitHub-compatible `/pulls` API; point `GIT_REPO_URL` at it.
+Setup: copy `example/` to a scratch folder, make it its own git repo with a
+throwaway GitHub repository as `origin` (a local bare repo covers everything
+except the PR steps), add `"git": { "prBasedEdits": true }` to its
+`astrocms.json`, set `GIT_REPO_URL` + `GIT_PAT` (fine-grained token with
+Contents: Read and write, Pull requests: Read and write), point
+`ASTROCMS_ROOT` at the scratch folder and start the CMS.
+
+- [ ] On `main`: review UI shows the base-branch warning and "Create branch"; committing is disabled
+- [ ] Create a working branch (e.g. `astrocms/e2e`): the branch bar shows it; it starts from the latest `main`
+- [ ] Edit a content file and commit: nothing is pushed; "1 ahead" appears after the status refresh
+- [ ] Push & open PR with a title: branch is pushed, a PR opens against `main`, the link shows up in the branch bar
+- [ ] Commit again and push: the same PR is updated, no title is asked, no second PR is created
+- [ ] Push a commit to `main` from another clone: "1 behind main" badge + "Update from main" button appear; clicking it merges cleanly
+- [ ] Agent in PR mode: "Commit N files with the agent" commits but does not push
+- [ ] The header menu (pull) is hidden in PR mode
+- [ ] Disable the flag again: the old commit-&-publish-to-main behavior works
+
+Optional full-stack local E2E without GitHub: Gitea in Docker exposes a
+GitHub-compatible `/pulls` API; point `GIT_REPO_URL` at it.
 
 Why not test in `example/` directly: it is part of this monorepo and not its own
 git repo; `git init`-ing inside it would create a nested repository. A scratch
@@ -249,9 +263,11 @@ standalone site repo).
    deliberate user action that opens (or reuses) the PR, which also removes
    any path to pushing the base branch. `/commit` resets the remote-check
    throttle so `aheadOfBase` refreshes after each commit.
-5. **Docs + E2E**: README (config section, `GIT_BRANCH` semantics, PAT
-   permissions), `.env.example`, manual E2E checklist run against a throwaway
-   GitHub repo.
+5. **Docs + E2E** — done: README (config section with the `git` block,
+   `GIT_BRANCH` base-branch semantics in PR mode, PAT "Pull requests: Read
+   and write" permission, dedicated "PR-based edits" section),
+   `ASTROCMS_PR_BASED_EDITS` in both `.env.example` files, and the manual E2E
+   checklist below (to run against a throwaway GitHub repo before merging).
 
 ## Decisions (2026-09-14)
 
