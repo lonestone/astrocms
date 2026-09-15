@@ -77,6 +77,26 @@ export interface GitFile {
   path: string
 }
 
+export interface GitPr {
+  number: number
+  title: string
+  url: string
+}
+
+/** Git + PR state, present in /status when PR-based edits are enabled. */
+export interface GitBranchInfo {
+  prMode: boolean
+  currentBranch: string
+  baseBranch: string
+  onBaseBranch: boolean
+  aheadOfBase: number
+  behindBase: number
+  /** Subject of HEAD; offered as the default PR title. */
+  lastCommitSubject: string
+  openPr: GitPr | null
+  openPrError?: string
+}
+
 export async function fetchTree(
   includes: { pattern: string; fields: string[] }[] = [],
   root: MediaRoot = 'content'
@@ -123,6 +143,7 @@ export async function saveFile(
 export async function fetchGitStatus(): Promise<{
   files: GitFile[]
   remote?: RemoteStatus
+  branch?: GitBranchInfo
 }> {
   const res = await authFetch(`/git/status`)
   return res.json()
@@ -206,6 +227,46 @@ export async function gitDiscard(path: string): Promise<{ ok: boolean }> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   })
+  return res.json()
+}
+
+/** Push the working branch and open (or reuse) its pull request. */
+export async function gitPush(
+  title: string
+): Promise<{
+  ok: boolean
+  pushed?: boolean
+  created?: boolean
+  pr?: GitPr
+  error?: string
+}> {
+  const res = await authFetch(`/git/push`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+  return res.json()
+}
+
+/** Create a new working branch from the latest base. */
+export async function gitCreateBranch(
+  name: string
+): Promise<{ ok: boolean; branch?: string; error?: string }> {
+  const res = await authFetch(`/git/branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  return res.json()
+}
+
+/** Merge the latest base into the current working branch. */
+export async function gitUpdateBranch(): Promise<{
+  ok: boolean
+  updated?: boolean
+  error?: string
+}> {
+  const res = await authFetch(`/git/branch/update`, { method: 'POST' })
   return res.json()
 }
 

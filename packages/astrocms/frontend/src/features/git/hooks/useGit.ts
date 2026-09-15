@@ -5,11 +5,14 @@ import {
   fetchGitDiffs,
   fetchGitRemoteStatus,
   gitCommit,
+  gitCreateBranch,
   gitDiscard,
   gitDiscardHunk,
   gitPull,
+  gitPush,
   gitStage,
   gitUnstage,
+  gitUpdateBranch,
 } from '../../../api.js'
 
 export function useGitStatus() {
@@ -17,6 +20,15 @@ export function useGitStatus() {
     queryKey: ['gitStatus'],
     queryFn: fetchGitStatus,
     select: (data) => data.files,
+  })
+}
+
+/** Git + PR state from /status; undefined when PR-based edits are off. */
+export function useGitBranch() {
+  return useQuery({
+    queryKey: ['gitStatus'],
+    queryFn: fetchGitStatus,
+    select: (data) => data.branch,
   })
 }
 
@@ -151,5 +163,54 @@ export function useGitUnstage() {
   return useMutation({
     mutationFn: (paths: string[]) => gitUnstage(paths),
     onSuccess: invalidate,
+  })
+}
+
+export function useGitPush() {
+  const invalidate = useGitInvalidate()
+
+  return useMutation({
+    mutationFn: async (title: string) => {
+      const result = await gitPush(title)
+      if (!result.ok) throw new Error(result.error || 'Push failed')
+      return result
+    },
+    onSuccess: invalidate,
+  })
+}
+
+export function useGitCreateBranch() {
+  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const result = await gitCreateBranch(name)
+      if (!result.ok) throw new Error(result.error || 'Could not create branch')
+      return result
+    },
+    onSuccess: () => {
+      invalidate()
+      // Switching branches changes the working tree; refresh file caches.
+      queryClient.invalidateQueries({ queryKey: ['tree'] })
+    },
+  })
+}
+
+export function useGitUpdateBranch() {
+  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      const result = await gitUpdateBranch()
+      if (!result.ok) throw new Error(result.error || 'Could not update branch')
+      return result
+    },
+    onSuccess: () => {
+      invalidate()
+      // The merge brings in base changes; refresh file caches.
+      queryClient.invalidateQueries({ queryKey: ['tree'] })
+    },
   })
 }

@@ -4,7 +4,7 @@ import { promisify } from 'util'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from '../root.js'
-import { loadConfig, type GitConfig } from '../config.js'
+import { loadConfig, type GitFlowConfig } from '../config.js'
 import {
   createPullRequest,
   findOpenPr,
@@ -46,9 +46,12 @@ function getBranch() {
   return process.env.GIT_BRANCH || 'main'
 }
 
-async function getGitSettings(): Promise<GitConfig> {
+async function getGitSettings(): Promise<GitFlowConfig> {
   const config = await loadConfig()
-  return config.git
+  // The git block is optional in the type (optional section in
+  // astrocms.json); loadConfig fills it with defaults, so this fallback is
+  // a safety net only.
+  return config.git ?? { prBasedEdits: false, baseBranch: 'main' }
 }
 
 /**
@@ -57,6 +60,15 @@ async function getGitSettings(): Promise<GitConfig> {
 async function getCurrentBranch(): Promise<string> {
   const out = await git('branch', '--show-current')
   return out.trim()
+}
+
+/** Subject of the latest commit (HEAD); empty when there are no commits. */
+async function getLastCommitSubject(): Promise<string> {
+  try {
+    return (await git('log', '-1', '--pretty=%s')).trim()
+  } catch {
+    return ''
+  }
 }
 
 async function ensureAuthedRemote() {
@@ -293,6 +305,8 @@ interface BranchInfo {
   onBaseBranch: boolean
   aheadOfBase: number
   behindBase: number
+  /** Subject of HEAD; the review UI offers it as the default PR title. */
+  lastCommitSubject: string
   openPr: GitHubPr | null
   openPrError?: string
 }
@@ -334,6 +348,7 @@ gitRoutes.get('/status', async (c) => {
         onBaseBranch: current === settings.baseBranch,
         aheadOfBase: remoteState.aheadOfBase,
         behindBase: remoteState.behindBase,
+        lastCommitSubject: await getLastCommitSubject(),
         openPr: remoteState.openPr,
         ...(remoteState.openPrError
           ? { openPrError: remoteState.openPrError }
@@ -492,6 +507,10 @@ gitRoutes.post('/commit', async (c) => {
       const branch = settings.prBasedEdits ? currentBranch! : getBranch()
       pushOutput = await git('push', 'origin', branch)
     }
+
+    // A commit moves HEAD, so cached ahead/behind counts are stale; force a
+    // fresh remote check on the next status poll (drives the push affordance).
+    remoteState.lastCheckedAt = null
 
     return c.json({ ok: true, commit: commitOutput, push: pushOutput })
   } catch (err) {

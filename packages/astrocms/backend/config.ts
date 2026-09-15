@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from './root.js'
 
-export interface GitConfig {
+export interface GitFlowConfig {
   /** PR-based edits: the CMS works on a branch and opens pull requests. */
   prBasedEdits: boolean
   /** The protected base branch (main/master) that PRs target. */
@@ -14,7 +14,8 @@ export interface AstroCmsConfig {
   contentConfig: string
   assetsDir?: string
   componentsDir?: string
-  git: GitConfig
+  /** Optional in astrocms.json; loadConfig fills it with defaults. */
+  git?: GitFlowConfig
 }
 
 /** Shape of the astrocms.json file; every key is optional. */

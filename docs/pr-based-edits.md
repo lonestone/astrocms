@@ -235,8 +235,20 @@ standalone site repo).
    throttled `checkRemote()` surfaced as `branch.openPr` / `openPrError` in
    `/status`. Tests against a local mock GitHub API server; the fixture keeps
    git fully offline via `url.*.insteadOf` while origin still parses as GitHub.
-4. **Frontend**: branch chip, ahead/behind badges, update button, new-branch
-   dialog, push & open PR flow with title input.
+4. **Frontend** — done: branch bar in the review UI (current-branch chip,
+   `N ahead` / `N behind <base>` badges, "Update from <base>" button that
+   merges the base, open-PR link or push hint; on the base branch it turns
+   into a warning with a "Create branch" button), new-branch dialog (free
+   name, prefilled `astrocms/`), and the push flow: "Commit" (no push) plus
+   a separate "Push & open PR" button whose title input defaults to the
+   latest commit subject (`branch.lastCommitSubject` in `/status`) and is
+   only required when no open PR exists — with an open PR it becomes a plain
+   "Push". `HeaderMenu` is hidden in PR mode (pulling the base branch is not
+   allowed; working branches auto-sync via `checkRemote`). The agent's
+   `allowedTools` are narrowed in PR mode: no push at all — pushing is the
+   deliberate user action that opens (or reuses) the PR, which also removes
+   any path to pushing the base branch. `/commit` resets the remote-check
+   throttle so `aheadOfBase` refreshes after each commit.
 5. **Docs + E2E**: README (config section, `GIT_BRANCH` semantics, PAT
    permissions), `.env.example`, manual E2E checklist run against a throwaway
    GitHub repo.

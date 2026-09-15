@@ -304,6 +304,7 @@ describe('git routes in PR-based edits mode', () => {
       onBaseBranch: true,
       aheadOfBase: 0,
       behindBase: 0,
+      lastCommitSubject: 'config',
       openPr: null,
     })
 

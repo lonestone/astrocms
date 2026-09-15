@@ -11,6 +11,7 @@ import {
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from '../root.js'
+import { loadConfig } from '../config.js'
 
 export const claudeRoutes = new Hono()
 
@@ -32,6 +33,34 @@ const allowedTools = [
   'Bash(cd * && git commit*)',
   'Bash(cd * && git push*)',
 ]
+
+// PR-based edits: the agent must never push. Pushing is a deliberate user
+// action in the review UI that opens (or reuses) a pull request, so it is
+// dropped here entirely — which also removes any path to pushing the base
+// branch. The agent can still inspect, stage and commit on the working branch.
+const prModeAllowedTools = [
+  'Read',
+  'Edit',
+  'Write',
+  'Grep',
+  'Glob',
+  'Agent',
+  'TodoWrite',
+  'NotebookEdit',
+  'Bash(ls:*)',
+  'Bash(find:*)',
+  'Bash(mkdir:*)',
+  'Bash(git status:*)',
+  'Bash(git diff:*)',
+  'Bash(git add:*)',
+  'Bash(git commit:*)',
+  'Bash(git log:*)',
+]
+
+async function effectiveAllowedTools(): Promise<string[]> {
+  const config = await loadConfig()
+  return (config.git?.prBasedEdits ?? false) ? prModeAllowedTools : allowedTools
+}
 
 // --- Permission request handling ---
 
@@ -213,7 +242,7 @@ claudeRoutes.post('/chat', async (c) => {
 
   const result = streamText({
     model: claudeCode('sonnet', {
-      allowedTools,
+      allowedTools: await effectiveAllowedTools(),
       canUseTool,
       cwd: ROOT_DIR,
       ...(sessionId ? { resume: sessionId } : {}),
