@@ -102,6 +102,16 @@ async function countBehind(branch: string): Promise<number> {
   return countCommits(`HEAD..origin/${branch}`)
 }
 
+/** True when the remote-tracking ref for `branch` exists locally. */
+async function hasRemoteRef(branch: string): Promise<boolean> {
+  try {
+    await git('show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Fetch one branch from origin. Returns false when the branch does not exist
  * on the remote yet (e.g. a working branch that was never pushed).
@@ -123,8 +133,6 @@ interface RemoteState {
   lastCheckedAt: number | null
   lastPulledAt: number | null
   error?: string
-  aheadOfBase: number
-  behindBase: number
   openPr: GitHubPr | null
   openPrError?: string
 }
@@ -134,8 +142,6 @@ const remoteState: RemoteState = {
   behind: 0,
   lastCheckedAt: null,
   lastPulledAt: null,
-  aheadOfBase: 0,
-  behindBase: 0,
   openPr: null,
 }
 
@@ -171,14 +177,10 @@ async function checkRemote(): Promise<void> {
       const current = await getCurrentBranch()
 
       // The base branch must exist on the remote; a failure here is a real
-      // error and lands in remoteState.error.
+      // error and lands in remoteState.error. /status derives ahead/behind
+      // from the local origin/<base> ref, so this fetch only keeps that ref
+      // fresh.
       await git('fetch', 'origin', settings.baseBranch)
-      remoteState.behindBase = await countCommits(
-        `HEAD..origin/${settings.baseBranch}`
-      )
-      remoteState.aheadOfBase = await countCommits(
-        `origin/${settings.baseBranch}..HEAD`
-      )
 
       if (current && current !== settings.baseBranch) {
         // The working branch may not exist on the remote yet.
@@ -232,7 +234,17 @@ async function checkRemote(): Promise<void> {
 }
 
 const REMOTE_CHECK_THROTTLE_MS = 60_000
-let checkInFlight = false
+let checkInFlight: Promise<void> | null = null
+
+/** Start a remote check if none is running; returns the shared promise. */
+function runRemoteCheck(): Promise<void> {
+  if (!checkInFlight) {
+    checkInFlight = checkRemote().finally(() => {
+      checkInFlight = null
+    })
+  }
+  return checkInFlight
+}
 
 /**
  * Fire-and-forget remote check, called from the hot path (`/status`,
@@ -240,13 +252,18 @@ let checkInFlight = false
  * a burst of UI requests doesn't flood `git fetch`.
  */
 function checkRemoteIfStale(): void {
-  if (checkInFlight) return
   const last = remoteState.lastCheckedAt ?? 0
   if (Date.now() - last < REMOTE_CHECK_THROTTLE_MS) return
-  checkInFlight = true
-  checkRemote().finally(() => {
-    checkInFlight = false
-  })
+  void runRemoteCheck()
+}
+
+/**
+ * Await a fresh remote check (the UI's refresh button). Reuses an in-flight
+ * check; otherwise starts one even inside the throttle window, so external
+ * changes (a merged PR, a push to main) show up in the very next response.
+ */
+async function awaitRemoteCheck(): Promise<void> {
+  await runRemoteCheck()
 }
 
 export const gitRoutes = new Hono()
@@ -305,6 +322,12 @@ interface BranchInfo {
   onBaseBranch: boolean
   aheadOfBase: number
   behindBase: number
+  /**
+   * Commits not yet on the remote working branch. Drives the push
+   * affordance: aheadOfBase stays > 0 until the PR merges, so it cannot
+   * tell us whether there is anything left to push. 0 on the base branch.
+   */
+  unpushed: number
   /** Subject of HEAD; the review UI offers it as the default PR title. */
   lastCommitSubject: string
   openPr: GitHubPr | null
@@ -315,8 +338,14 @@ gitRoutes.get('/status', async (c) => {
   // Piggyback a throttled remote check on the most-called endpoint. Non
   // blocking: the request returns immediately with whatever we know now;
   // the follow-up fetch updates `lastPulledAt` and the UI detects the
-  // change on its next status fetch.
-  checkRemoteIfStale()
+  // change on its next status fetch. `?force=1` (the UI's refresh button)
+  // waits for a fresh check instead, so e.g. a PR merged on GitHub is
+  // reflected immediately rather than after the next throttle window.
+  if (c.req.query('force') === '1') {
+    await awaitRemoteCheck()
+  } else {
+    checkRemoteIfStale()
+  }
   try {
     const raw = await git('status', '--porcelain', '-z', '-uall')
     const files = parsePorcelainZ(raw)
@@ -341,13 +370,31 @@ gitRoutes.get('/status', async (c) => {
     let branch: BranchInfo | undefined
     if (settings.prBasedEdits) {
       const current = await getCurrentBranch()
+      // Ahead/behind are derived from local refs at response time instead of
+      // being cached by the background check: HEAD moves on every commit, so
+      // a cached count would lag one status call behind (the check that
+      // refreshes it only finishes after this response is sent). The
+      // throttled checkRemote() keeps origin/<base> fresh; when the ref does
+      // not exist yet (fresh clone, first fetch in flight) both counts are 0.
+      const aheadOfBase = await countCommits(`origin/${settings.baseBranch}..HEAD`)
+      const behindBase = await countCommits(`HEAD..origin/${settings.baseBranch}`)
+
+      // A never-pushed branch has no remote ref: everything is unpushed.
+      let unpushed = 0
+      if (current && current !== settings.baseBranch) {
+        unpushed = (await hasRemoteRef(current))
+          ? await countCommits(`origin/${current}..HEAD`)
+          : aheadOfBase
+      }
+
       branch = {
         prMode: true,
         currentBranch: current,
         baseBranch: settings.baseBranch,
         onBaseBranch: current === settings.baseBranch,
-        aheadOfBase: remoteState.aheadOfBase,
-        behindBase: remoteState.behindBase,
+        aheadOfBase,
+        behindBase,
+        unpushed,
         lastCommitSubject: await getLastCommitSubject(),
         openPr: remoteState.openPr,
         ...(remoteState.openPrError
@@ -757,7 +804,10 @@ gitRoutes.post('/push', async (c) => {
     await git('push', '-u', 'origin', current)
 
     if (open) {
-      // An open PR already exists: the push is enough.
+      // An open PR already exists: the push is enough. Cache it so the
+      // status refetch right after this call already shows the PR link.
+      remoteState.openPr = open
+      remoteState.openPrError = undefined
       remoteState.lastCheckedAt = null
       return c.json({ ok: true, pushed: true, pr: open })
     }
@@ -776,6 +826,10 @@ gitRoutes.post('/push', async (c) => {
         head: current,
         base: settings.baseBranch,
       })
+      // Cache the new PR so the status refetch right after this call already
+      // shows the link instead of waiting for the next background lookup.
+      remoteState.openPr = pr
+      remoteState.openPrError = undefined
       remoteState.lastCheckedAt = null
       return c.json({ ok: true, pushed: true, created: true, pr })
     } catch (err) {

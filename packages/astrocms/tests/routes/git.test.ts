@@ -304,6 +304,7 @@ describe('git routes in PR-based edits mode', () => {
       onBaseBranch: true,
       aheadOfBase: 0,
       behindBase: 0,
+      unpushed: 0,
       lastCommitSubject: 'config',
       openPr: null,
     })
@@ -339,6 +340,8 @@ describe('git routes in PR-based edits mode', () => {
     let body: any = await (await app.request('/status')).json()
     expect(body.branch.aheadOfBase).toBe(1)
     expect(body.branch.behindBase).toBe(0)
+    // Never pushed: no remote ref, so everything is unpushed.
+    expect(body.branch.unpushed).toBe(1)
 
     // Advance origin/main through a second clone.
     const other = join(fx.dir, 'other')
@@ -356,6 +359,30 @@ describe('git routes in PR-based edits mode', () => {
     body = await (await app.request('/status')).json()
     expect(body.branch.aheadOfBase).toBe(1)
     expect(body.branch.behindBase).toBe(1)
+    expect(body.branch.unpushed).toBe(1)
+  })
+
+  it('reports aheadOfBase immediately after /commit, before the remote check settles', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    const app = await importRoutes(fx.root)
+
+    // Commit through the routes (the UI path). No settle(): the fire-and-
+    // forget remote check may still be in flight, but /status derives
+    // ahead/behind from local refs, so the count must already be correct.
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    const staged = await post(app, '/stage', { paths: ['index.md'] })
+    expect(staged.status).toBe(200)
+    const res = await post(app, '/commit', { message: 'ahead' })
+    expect(res.status).toBe(200)
+
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.aheadOfBase).toBe(1)
+    expect(body.branch.behindBase).toBe(0)
+    // Never pushed: no remote ref, so everything is unpushed.
+    expect(body.branch.unpushed).toBe(1)
   })
 
   it('refuses to pull the base branch in PR mode', async () => {
@@ -799,6 +826,17 @@ describe('git routes: push and PR (PR-based edits)', () => {
     expect(created.base).toBe('main')
     expect(created.body).toContain('- M index.md')
     expect(created.body).toContain('Created with AstroCMS')
+
+    // The status refetch right after the push (the UI invalidates gitStatus)
+    // already shows the PR link — no wait for the next background lookup.
+    const status: any = await (await app.request('/status')).json()
+    expect(status.branch.openPr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+    // Everything is on the remote working branch now: nothing left to push.
+    expect(status.branch.unpushed).toBe(0)
   })
 
   it('pushes only when an open PR already exists (no title needed)', async () => {
@@ -902,6 +940,34 @@ describe('git routes: push and PR (PR-based edits)', () => {
       title: 'My PR',
       url: 'https://github.com/testowner/testrepo/pull/7',
     })
+  })
+
+  it('force=1 re-checks the remote even inside the throttle window', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    let body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr?.number).toBe(7)
+
+    // The PR gets merged on GitHub. A plain /status still serves the cached
+    // state (the background check is throttled)...
+    mock.pulls = []
+    body = await (await app.request('/status')).json()
+    expect(body.branch.openPr?.number).toBe(7)
+
+    // ...but the refresh button's forced check sees it right away.
+    body = await (await app.request('/status?force=1')).json()
+    expect(body.branch.openPr).toBeNull()
   })
 
   it('surfaces a GitHub lookup failure as openPrError', async () => {

@@ -91,6 +91,12 @@ export interface GitBranchInfo {
   onBaseBranch: boolean
   aheadOfBase: number
   behindBase: number
+  /**
+   * Commits not yet on the remote working branch. Drives the push
+   * affordance: aheadOfBase stays > 0 until the PR merges, so it cannot
+   * tell us whether there is anything left to push. 0 on the base branch.
+   */
+  unpushed: number
   /** Subject of HEAD; offered as the default PR title. */
   lastCommitSubject: string
   openPr: GitPr | null
@@ -140,12 +146,22 @@ export async function saveFile(
   return res.json()
 }
 
-export async function fetchGitStatus(): Promise<{
+export interface GitStatusResponse {
   files: GitFile[]
   remote?: RemoteStatus
   branch?: GitBranchInfo
-}> {
-  const res = await authFetch(`/git/status`)
+}
+
+/**
+ * `force` makes the backend run a fresh remote check (git fetch + open-PR
+ * lookup) before answering, bypassing its 60 s throttle. Used by the review
+ * UI's refresh button so external changes (merged PR, push to main) show up
+ * immediately.
+ */
+export async function fetchGitStatus(
+  force = false
+): Promise<GitStatusResponse> {
+  const res = await authFetch(`/git/status${force ? '?force=1' : ''}`)
   return res.json()
 }
 

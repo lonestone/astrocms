@@ -5,12 +5,13 @@ import {
   TbGitBranch,
   TbGitCommit,
   TbGitPullRequest,
+  TbLoader2,
   TbPlus,
   TbRefresh,
   TbSparkles,
 } from 'react-icons/tb'
 import { useQueryClient } from '@tanstack/react-query'
-import type { GitBranchInfo } from '../../../api.js'
+import { fetchGitStatus, type GitBranchInfo } from '../../../api.js'
 import Button from '../../common/components/Button.js'
 import { IconButton } from '../../common/components/IconButton.js'
 import { inputClass } from '../../common/components/Input.js'
@@ -49,6 +50,7 @@ export function GitReview() {
   const [message, setMessage] = useState('')
   const [prTitle, setPrTitle] = useState('')
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Offer the latest commit subject as the default PR title, but only while
   // the user hasn't typed their own.
@@ -66,7 +68,13 @@ export function GitReview() {
   // Push / PR state (PR mode, working branch only).
   const openPr = branch?.openPr ?? null
   const aheadOfBase = branch?.aheadOfBase ?? 0
-  const canPush = prMode && !onBaseBranch && aheadOfBase > 0
+  const unpushed = branch?.unpushed ?? 0
+  // Push is actionable when there are commits not yet on the remote working
+  // branch, or when the branch has content but no open PR yet (a push then
+  // opens it). With an open PR and nothing unpushed there is nothing to do:
+  // aheadOfBase alone can't drive this, it stays > 0 until the PR merges.
+  const canPush =
+    prMode && !onBaseBranch && aheadOfBase > 0 && (unpushed > 0 || !openPr)
   const pushNeedsTitle = canPush && !openPr
   const canDoPush = canPush && (!pushNeedsTitle || prTitle.trim().length > 0)
 
@@ -86,8 +94,20 @@ export function GitReview() {
     }
   }
 
-  function handleRefresh() {
-    queryClient.invalidateQueries({ queryKey: ['gitStatus'] })
+  async function handleRefresh() {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      // Force a fresh remote check on the backend: plain invalidation would
+      // re-fetch /status, which serves cached PR state while the 60 s check
+      // throttle is active (e.g. right after merging a PR on GitHub).
+      await queryClient.fetchQuery({
+        queryKey: ['gitStatus'],
+        queryFn: () => fetchGitStatus(true),
+      })
+    } finally {
+      setRefreshing(false)
+    }
     queryClient.invalidateQueries({ queryKey: ['gitDiffs'] })
   }
 
@@ -138,7 +158,11 @@ export function GitReview() {
                   ? 'Checking the working tree'
                   : files.length === 0
                     ? prMode && !onBaseBranch && aheadOfBase > 0
-                      ? 'All changes are committed — push to open a pull request.'
+                      ? openPr
+                        ? unpushed > 0
+                          ? 'All changes are committed — push to update the pull request.'
+                          : 'All changes are committed and pushed to the pull request.'
+                        : 'All changes are committed — push to open a pull request.'
                       : 'Everything is published.'
                     : `${files.length} file${files.length === 1 ? '' : 's'} changed, ${stagedCount} selected to publish`}
               </p>
@@ -157,8 +181,16 @@ export function GitReview() {
                 Select all
               </label>
             )}
-            <IconButton label="Refresh" onClick={handleRefresh}>
-              <TbRefresh size={16} />
+            <IconButton
+              label="Refresh"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <TbLoader2 size={16} className="animate-spin" />
+              ) : (
+                <TbRefresh size={16} />
+              )}
             </IconButton>
           </div>
 
@@ -206,7 +238,11 @@ export function GitReview() {
                 </p>
                 <p className="text-xs text-text-muted">
                   {prMode && !onBaseBranch && aheadOfBase > 0
-                    ? 'Push from the bar below to open a pull request.'
+                    ? openPr
+                      ? unpushed > 0
+                        ? 'Push from the bar below to update the pull request.'
+                        : 'All commits are on the open pull request.'
+                      : 'Push from the bar below to open a pull request.'
                     : 'Edits you make will show up here, ready to publish.'}
                 </p>
               </div>
