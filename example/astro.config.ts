@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config'
 import mdx from '@astrojs/mdx'
+import { unified } from '@astrojs/markdown-remark'
 import tailwindcss from '@tailwindcss/vite'
 import rehypeMdClass from './src/rehype-md-class'
 import config from './website.config'
@@ -8,7 +9,9 @@ export default defineConfig({
   site: config.site,
   integrations: [mdx()],
   markdown: {
-    rehypePlugins: [rehypeMdClass],
+    processor: unified({
+      rehypePlugins: [rehypeMdClass],
+    }),
   },
   vite: {
     plugins: [tailwindcss()],

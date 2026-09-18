@@ -185,9 +185,9 @@ function resolveType(
     typeNode.type === 'TSTypeReference' &&
     isIdentifier(typeNode.typeName) &&
     typeNode.typeName.name === 'Array' &&
-    typeNode.typeParameters?.params.length === 1
+    typeNode.typeArguments?.params.length === 1
   ) {
-    elementType = typeNode.typeParameters.params[0]
+    elementType = typeNode.typeArguments.params[0]
   }
 
   if (elementType) {
