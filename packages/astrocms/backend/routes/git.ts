@@ -198,9 +198,13 @@ async function checkRemote(): Promise<void> {
 
       // Best-effort open-PR lookup for the working branch. Skipped when the
       // origin is not a GitHub URL or no PAT is configured; failures land in
-      // openPrError without affecting the git state above.
-      remoteState.openPr = null
-      remoteState.openPrError = undefined
+      // openPrError without affecting the git state above. The result is
+      // collected locally and published in one step at the end: clearing
+      // remoteState.openPr up front would blank the PR link that /status
+      // serves while this lookup is still in flight, right after a push
+      // cached it.
+      let openPr: GitHubPr | null = null
+      let openPrError: string | undefined
       if (current && current !== settings.baseBranch) {
         try {
           // Read the stored origin URL straight from config: `git remote
@@ -209,16 +213,14 @@ async function checkRemote(): Promise<void> {
           const originUrl = await git('config', '--get', 'remote.origin.url')
           const parsed = parseRepoFromUrl(originUrl)
           if (parsed && process.env.GIT_PAT) {
-            remoteState.openPr = await findOpenPr(
-              parsed.owner,
-              parsed.repo,
-              current
-            )
+            openPr = await findOpenPr(parsed.owner, parsed.repo, current)
           }
         } catch (err) {
-          remoteState.openPrError = String((err as any)?.message ?? err)
+          openPrError = String((err as any)?.message ?? err)
         }
       }
+      remoteState.openPr = openPr
+      remoteState.openPrError = openPrError
     } else {
       const branch = getBranch()
       await git('fetch', 'origin', branch)

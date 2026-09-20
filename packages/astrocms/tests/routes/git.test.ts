@@ -131,14 +131,17 @@ function startMockGitHub(): Promise<MockGitHub> {
       req.on('end', () => {
         const body = JSON.parse(raw)
         mock.createdBodies.push(body)
+        const pr = {
+          number: 7,
+          title: body.title,
+          html_url: 'https://github.com/testowner/testrepo/pull/7',
+        }
+        // GitHub lists a PR as soon as it is created, so a background remote
+        // check running right after /push finds it instead of concluding the
+        // branch has no PR and clearing the one /push just cached.
+        mock.pulls.push(pr)
         res.writeHead(201, { 'content-type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            number: 7,
-            title: body.title,
-            html_url: 'https://github.com/testowner/testrepo/pull/7',
-          })
-        )
+        res.end(JSON.stringify(pr))
       })
     } else {
       res.writeHead(404, { 'content-type': 'application/json' })

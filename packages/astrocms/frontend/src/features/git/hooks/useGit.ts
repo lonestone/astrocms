@@ -29,10 +29,18 @@ import {
  */
 const GIT_STATUS_REFETCH_MS = 30_000
 
+/**
+ * react-query calls queryFn with its own context object, which would land in
+ * `fetchGitStatus`'s `force` parameter and make every poll wait on a fresh
+ * remote check, bypassing the backend throttle. Wrapping keeps polls unforced;
+ * the review UI's refresh button is the only caller that forces a check.
+ */
+const gitStatusQueryFn = () => fetchGitStatus()
+
 export function useGitStatus() {
   return useQuery({
     queryKey: ['gitStatus'],
-    queryFn: fetchGitStatus,
+    queryFn: gitStatusQueryFn,
     refetchInterval: GIT_STATUS_REFETCH_MS,
     select: (data) => data.files,
   })
@@ -42,7 +50,7 @@ export function useGitStatus() {
 export function useGitBranch() {
   return useQuery({
     queryKey: ['gitStatus'],
-    queryFn: fetchGitStatus,
+    queryFn: gitStatusQueryFn,
     refetchInterval: GIT_STATUS_REFETCH_MS,
     select: (data) => data.branch,
   })
@@ -59,7 +67,7 @@ export function useGitRemoteSync() {
 
   const { data: lastPulledAt } = useQuery({
     queryKey: ['gitStatus'],
-    queryFn: fetchGitStatus,
+    queryFn: gitStatusQueryFn,
     refetchInterval: GIT_STATUS_REFETCH_MS,
     select: (data) => data.remote?.lastPulledAt ?? null,
   })
