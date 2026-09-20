@@ -34,6 +34,59 @@ jobs:
       - name: Build frontend
         run: npm run build --workspace astrocms
 
+  publish-npm:
+    needs: test
+    # Only the default branch publishes; a pull request stops after `test`.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets npm attach a provenance attestation to the published tarball.
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Read package version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/astrocms/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if the version is already on npm
+        id: check
+        run: |
+          if npm view "astrocms@${{ steps.version.outputs.version }}" version > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "astrocms@${{ steps.version.outputs.version }} is already published, skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install
+        if: steps.check.outputs.exists == 'false'
+        run: npm ci
+
+      # `files` ships dist/, which prepack does not build (it only copies the
+      # README), so the frontend bundle has to exist before publishing.
+      - name: Build frontend
+        if: steps.check.outputs.exists == 'false'
+        run: npm run build --workspace astrocms
+
+      - name: Publish
+        if: steps.check.outputs.exists == 'false'
+        run: npm publish --workspace astrocms --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   publish:
     needs: test
     # Only the default branch publishes; a pull request stops after `test`.
