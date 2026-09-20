@@ -144,7 +144,7 @@ A `.env` file at the project root is auto-loaded when running `astrocms` locally
 With `git.prBasedEdits` enabled, the CMS never commits or pushes to the base branch (e.g. `main`). Instead:
 
 1. Create a working branch from the review UI ("Review changes" → **Create branch**). It always starts from the latest base.
-2. Commit as usual — commits land on the working branch only, nothing is pushed yet.
+2. Commit as usual. Commits land on the working branch only, and nothing is pushed yet.
 3. Push from the review UI with a title: AstroCMS pushes the branch and opens a pull request against the base. If a PR is already open for the branch, pushing just updates it and no title is needed.
 
 The review UI always shows the current branch, how far ahead of / behind the base it is (with an **Update from \<base\>** button that merges the base into the working branch), and a link to the open PR. While you are on the base branch, committing is disabled until you create a working branch.

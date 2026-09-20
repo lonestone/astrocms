@@ -115,7 +115,7 @@ export function GitReview() {
     if (!canCommit) return
     try {
       // Non-PR mode keeps the old commit-and-push behavior; PR mode commits
-      // only — pushing is a separate, deliberate action that opens the PR.
+      // only; pushing is a separate, deliberate action that opens the PR.
       await commit.mutateAsync({ message: message.trim(), push: !prMode })
       setMessage('')
     } catch {
@@ -160,9 +160,9 @@ export function GitReview() {
                     ? prMode && !onBaseBranch && aheadOfBase > 0
                       ? openPr
                         ? unpushed > 0
-                          ? 'All changes are committed — push to update the pull request.'
+                          ? 'All changes are committed. Push to update the pull request.'
                           : 'All changes are committed and pushed to the pull request.'
-                        : 'All changes are committed — push to open a pull request.'
+                        : 'All changes are committed. Push to open a pull request.'
                       : 'Everything is published.'
                     : `${files.length} file${files.length === 1 ? '' : 's'} changed, ${stagedCount} selected to publish`}
               </p>
@@ -441,7 +441,7 @@ function BranchBar({
         <>
           <span className="inline-flex items-center gap-1 text-xs text-warning-text">
             <TbAlertTriangle size={14} />
-            You're on the base branch — create a working branch to publish.
+            You're on the base branch. Create a working branch to publish.
           </span>
           <Button
             size="sm"
