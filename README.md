@@ -94,7 +94,11 @@ AstroCMS reads an optional `astrocms.json` at the project root:
   "contentDir": "src/content",
   "contentConfig": "src/content.config.ts",
   "assetsDir": "src/assets",
-  "componentsDir": "src/components"
+  "componentsDir": "src/components",
+  "git": {
+    "prBasedEdits": true,
+    "baseBranch": "main"
+  }
 }
 ```
 
@@ -106,6 +110,8 @@ All fields are optional.
 | `contentConfig` | Path to the Zod schema file | `src/content.config.ts` |
 | `assetsDir` | Extra directory the media picker can browse and upload to, shown as an "Assets" tab. Uploads default to the folder of the content being edited. If unset, only `contentDir` is available. | *(content only)* |
 | `componentsDir` | Astro components available in the MDX editor. If unset, component discovery is skipped entirely. | *(components disabled)* |
+| `git.prBasedEdits` | Enable [PR-based edits](#pr-based-edits): the CMS never commits or pushes to the base branch; edits happen on a working branch you create from the UI, and pushing opens a pull request. | `false` |
+| `git.baseBranch` | The protected base branch that pull requests target. | `GIT_BRANCH`, or `main` if unset |
 
 Any `astrocms.json` field can also be set via environment variable. Env values override the JSON file when both are present. This is useful for Docker deployments where the config lives outside the container image.
 
@@ -115,6 +121,7 @@ Any `astrocms.json` field can also be set via environment variable. Env values o
 | `ASTROCMS_CONTENT_CONFIG` | `contentConfig` |
 | `ASTROCMS_ASSETS_DIR` | `assetsDir` |
 | `ASTROCMS_COMPONENTS_DIR` | `componentsDir` |
+| `ASTROCMS_PR_BASED_EDITS` | `git.prBasedEdits` (`1`/`true` enables, any other non-empty value disables) |
 
 Deployment-only environment variables:
 
@@ -125,12 +132,28 @@ Deployment-only environment variables:
 | `ASTROCMS_DEV_PORT` | Port the dev server listens on (used for the proxy and for probing). | `4321` when `ASTROCMS_DEV_CMD` is set |
 | `ASTROCMS_INSTALL_CMD` | Override the project dependency install command in the container. By default the entrypoint auto-detects npm / pnpm / yarn / bun from the lockfile. | *(auto-detected)* |
 | `GIT_REPO_URL` | Git repo URL (Docker mode) | *(auto-detected)* |
-| `GIT_BRANCH` | Git branch | `main` |
+| `GIT_BRANCH` | Git branch. With PR-based edits enabled this names the **base** branch (the protected one), not a working branch. | `main` |
 | `GIT_PAT` | GitHub Personal Access Token | *(none)* |
 | `GIT_USER_EMAIL` | Git commit email | `cms@astrocms.dev` |
 | `GIT_USER_NAME` | Git commit author | `AstroCMS` |
 
 A `.env` file at the project root is auto-loaded when running `astrocms` locally. Shell variables take precedence over `.env` values.
+
+### PR-based edits
+
+With `git.prBasedEdits` enabled, the CMS never commits or pushes to the base branch (e.g. `main`). Instead:
+
+1. Create a working branch from the review UI ("Review changes" → **Create branch**). It always starts from the latest base.
+2. Commit as usual — commits land on the working branch only, nothing is pushed yet.
+3. Push from the review UI with a title: AstroCMS pushes the branch and opens a pull request against the base. If a PR is already open for the branch, pushing just updates it and no title is needed.
+
+The review UI always shows the current branch, how far ahead of / behind the base it is (with an **Update from \<base\>** button that merges the base into the working branch), and a link to the open PR. While you are on the base branch, committing is disabled until you create a working branch.
+
+Notes:
+
+- The AI agent can commit but cannot push in this mode; pushing is always a deliberate action from the review UI.
+- The token additionally needs **Pull requests: Read and write** (see [Generating a GitHub PAT](#generating-a-github-pat)).
+- Requires a GitHub repository; other forges are not supported yet.
 
 ## Best practices
 
@@ -262,6 +285,7 @@ With that, `http://localhost:4001/` serves the live site and `http://localhost:4
 2. **Repository access**: select **Only select repositories** and pick the repo you'll point `GIT_REPO_URL` at.
 3. **Repository permissions**:
    - **Contents**: `Read and write` (required for clone, pull, push)
+   - **Pull requests**: `Read and write` (only for [PR-based edits](#pr-based-edits): creating and listing pull requests)
    - **Metadata**: `Read-only` (selected automatically)
 4. Click **Generate token** and copy the value, which is shown only once.
 5. Paste it into `.env` as `GIT_PAT=github_pat_...`.

@@ -1,22 +1,50 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
 import {
   fetchGitStatus,
   fetchGitDiffs,
   fetchGitRemoteStatus,
   gitCommit,
+  gitCreateBranch,
   gitDiscard,
   gitDiscardHunk,
   gitPull,
+  gitPush,
   gitStage,
   gitUnstage,
+  gitUpdateBranch,
+  type GitStatusResponse,
 } from '../../../api.js'
+
+/**
+ * How often the review UI re-polls git status. Mutations already invalidate
+ * the query immediately; this interval covers changes that happen outside the
+ * CMS (e.g. someone pushes to the base branch → "N behind" badge) and keeps
+ * the open-PR state fresh after background remote checks.
+ */
+const GIT_STATUS_REFETCH_MS = 30_000
 
 export function useGitStatus() {
   return useQuery({
     queryKey: ['gitStatus'],
     queryFn: fetchGitStatus,
+    refetchInterval: GIT_STATUS_REFETCH_MS,
     select: (data) => data.files,
+  })
+}
+
+/** Git + PR state from /status; undefined when PR-based edits are off. */
+export function useGitBranch() {
+  return useQuery({
+    queryKey: ['gitStatus'],
+    queryFn: fetchGitStatus,
+    refetchInterval: GIT_STATUS_REFETCH_MS,
+    select: (data) => data.branch,
   })
 }
 
@@ -32,6 +60,7 @@ export function useGitRemoteSync() {
   const { data: lastPulledAt } = useQuery({
     queryKey: ['gitStatus'],
     queryFn: fetchGitStatus,
+    refetchInterval: GIT_STATUS_REFETCH_MS,
     select: (data) => data.remote?.lastPulledAt ?? null,
   })
 
@@ -136,20 +165,108 @@ export function useGitDiscardHunk() {
   })
 }
 
+/**
+ * Optimistic stage/unstage: flip the staged flags in the gitStatus cache
+ * immediately so checkboxes respond to clicks without waiting for the server
+ * round-trip. Returns the previous cache snapshot so onError can roll back.
+ */
+async function optimisticStaged(
+  queryClient: QueryClient,
+  staged: boolean,
+  paths: string[]
+) {
+  await queryClient.cancelQueries({ queryKey: ['gitStatus'] })
+  const previous = queryClient.getQueryData<GitStatusResponse>(['gitStatus'])
+  queryClient.setQueryData<GitStatusResponse>(['gitStatus'], (old) => {
+    if (!old?.files) return old
+    const set = new Set(paths)
+    return {
+      ...old,
+      files: old.files.map((f) => (set.has(f.path) ? { ...f, staged } : f)),
+    }
+  })
+  return { previous }
+}
+
+function restoreStaged(
+  queryClient: QueryClient,
+  context?: { previous?: GitStatusResponse }
+) {
+  if (context?.previous) queryClient.setQueryData(['gitStatus'], context.previous)
+}
+
+function settleGitQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['gitStatus'] })
+  queryClient.invalidateQueries({ queryKey: ['gitDiffs'] })
+}
+
 export function useGitStage() {
-  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (paths: string[]) => gitStage(paths),
-    onSuccess: invalidate,
+    onMutate: (paths) => optimisticStaged(queryClient, true, paths),
+    onError: (_err, _paths, context) => restoreStaged(queryClient, context),
+    onSettled: () => settleGitQueries(queryClient),
   })
 }
 
 export function useGitUnstage() {
-  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (paths: string[]) => gitUnstage(paths),
+    onMutate: (paths) => optimisticStaged(queryClient, false, paths),
+    onError: (_err, _paths, context) => restoreStaged(queryClient, context),
+    onSettled: () => settleGitQueries(queryClient),
+  })
+}
+
+export function useGitPush() {
+  const invalidate = useGitInvalidate()
+
+  return useMutation({
+    mutationFn: async (title: string) => {
+      const result = await gitPush(title)
+      if (!result.ok) throw new Error(result.error || 'Push failed')
+      return result
+    },
     onSuccess: invalidate,
+  })
+}
+
+export function useGitCreateBranch() {
+  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const result = await gitCreateBranch(name)
+      if (!result.ok) throw new Error(result.error || 'Could not create branch')
+      return result
+    },
+    onSuccess: () => {
+      invalidate()
+      // Switching branches changes the working tree; refresh file caches.
+      queryClient.invalidateQueries({ queryKey: ['tree'] })
+    },
+  })
+}
+
+export function useGitUpdateBranch() {
+  const invalidate = useGitInvalidate()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      const result = await gitUpdateBranch()
+      if (!result.ok) throw new Error(result.error || 'Could not update branch')
+      return result
+    },
+    onSuccess: () => {
+      invalidate()
+      // The merge brings in base changes; refresh file caches.
+      queryClient.invalidateQueries({ queryKey: ['tree'] })
+    },
   })
 }

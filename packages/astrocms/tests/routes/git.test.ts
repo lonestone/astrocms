@@ -1,0 +1,994 @@
+import { execFile } from 'child_process'
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises'
+import { createServer, type Server } from 'node:http'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { promisify } from 'util'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+/**
+ * Integration tests for the git routes in PR-based edits mode. Each test
+ * builds a real (temporary) site repo with a bare local remote as origin, so
+ * branch guards and ahead/behind detection run against actual git without any
+ * network access.
+ *
+ * `ROOT_DIR` is resolved from ASTROCMS_ROOT at module import time and both it
+ * and the config cache are per module instance, so each test points the env
+ * var at its own fixture root and re-imports the routes via vi.resetModules().
+ */
+
+const exec = promisify(execFile)
+
+async function git(cwd: string, ...args: string[]) {
+  const { stdout } = await exec('git', args, { cwd })
+  return stdout.trimEnd()
+}
+
+interface Fixture {
+  dir: string // temp parent holding site + origin.git
+  root: string // the site working copy (ASTROCMS_ROOT)
+  origin: string // bare remote
+}
+
+async function makeFixture(
+  gitConfig: Record<string, unknown> | null
+): Promise<Fixture> {
+  const dir = await mkdtemp(join(tmpdir(), 'astrocms-git-'))
+  const root = join(dir, 'site')
+  const origin = join(dir, 'origin.git')
+  await mkdir(root)
+
+  await git(dir, 'init', '--bare', origin)
+  await git(root, 'init', '-b', 'main')
+  await git(root, 'config', 'user.email', 'cms@test.local')
+  await git(root, 'config', 'user.name', 'CMS Test')
+
+  await writeFile(join(root, 'index.md'), '# Hello\n')
+  await git(root, 'add', '.')
+  await git(root, 'commit', '-m', 'initial')
+
+  if (gitConfig) {
+    await writeFile(join(root, 'astrocms.json'), JSON.stringify(gitConfig))
+    await git(root, 'add', '.')
+    await git(root, 'commit', '-m', 'config')
+  }
+
+  await git(root, 'remote', 'add', 'origin', origin)
+  await git(root, 'push', '-u', 'origin', 'main')
+  // Point the bare repo's HEAD at main so clones check out a branch.
+  await git(dir, '--git-dir', origin, 'symbolic-ref', 'HEAD', 'refs/heads/main')
+
+  return { dir, root, origin }
+}
+
+/**
+ * Advance a branch on origin through a second clone, simulating someone else
+ * pushing to the repo.
+ */
+async function advanceOrigin(
+  fx: Fixture,
+  branch: string,
+  file: string,
+  content: string,
+  message: string
+): Promise<void> {
+  const other = join(fx.dir, 'other')
+  await git(fx.dir, 'clone', fx.origin, other)
+  if (branch !== 'main') await git(other, 'switch', branch)
+  await git(other, 'config', 'user.email', 'other@test.local')
+  await git(other, 'config', 'user.name', 'Other')
+  await writeFile(join(other, file), content)
+  await git(other, 'add', '.')
+  await git(other, 'commit', '-m', message)
+  await git(other, 'push', 'origin', branch)
+}
+
+/**
+ * Point the fixture's origin at a GitHub-style URL while keeping all git
+ * operations offline: `url.<local>.insteadOf` makes git transparently rewrite
+ * the GitHub URL to the local bare repo. PR-mode code then sees a parseable
+ * GitHub origin (for the API) while fetch/push hit the local remote.
+ */
+async function setGitHubOrigin(fx: Fixture): Promise<void> {
+  await git(
+    fx.root,
+    'remote',
+    'set-url',
+    'origin',
+    'https://github.com/testowner/testrepo'
+  )
+  await git(
+    fx.root,
+    'config',
+    `url.${fx.origin}.insteadOf`,
+    'https://github.com/testowner/testrepo'
+  )
+}
+
+interface MockGitHub {
+  base: string
+  /** Recorded bodies of POST /repos/.../pulls calls. */
+  createdBodies: any[]
+  /** What GET /repos/.../pulls returns (mutable per test). */
+  pulls: unknown[]
+  /** If set, GET /repos/.../pulls responds with this status. */
+  getStatus?: number
+}
+
+const mockServers: Server[] = []
+
+function startMockGitHub(): Promise<MockGitHub> {
+  const mock: MockGitHub = { base: '', createdBodies: [], pulls: [] }
+  const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url?.startsWith('/repos/testowner/testrepo/pulls')) {
+      const status = mock.getStatus ?? 200
+      res.writeHead(status, { 'content-type': 'application/json' })
+      if (status === 200) res.end(JSON.stringify(mock.pulls))
+      else res.end(JSON.stringify({ message: 'boom' }))
+    } else if (req.method === 'POST' && req.url === '/repos/testowner/testrepo/pulls') {
+      let raw = ''
+      req.on('data', (chunk) => (raw += chunk))
+      req.on('end', () => {
+        const body = JSON.parse(raw)
+        mock.createdBodies.push(body)
+        res.writeHead(201, { 'content-type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            number: 7,
+            title: body.title,
+            html_url: 'https://github.com/testowner/testrepo/pull/7',
+          })
+        )
+      })
+    } else {
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ message: 'Not Found' }))
+    }
+  })
+  mockServers.push(server)
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address() as { port: number }
+      mock.base = `http://127.0.0.1:${address.port}`
+      resolve(mock)
+    })
+  })
+}
+
+/** A PR object as the mock server (and GitHub) would return it. */
+const MOCK_PR = {
+  number: 7,
+  title: 'My PR',
+  html_url: 'https://github.com/testowner/testrepo/pull/7',
+}
+
+type Routes = { request(path: string, init?: RequestInit): Promise<Response> }
+
+let lastApp: Routes | undefined
+const createdDirs: string[] = []
+
+async function importRoutes(root: string): Promise<Routes> {
+  vi.stubEnv('ASTROCMS_ROOT', root)
+  vi.resetModules()
+  const { gitRoutes } = await import('../../backend/routes/git.js')
+  lastApp = gitRoutes
+  return gitRoutes
+}
+
+/**
+ * Wait until the fire-and-forget remote check of a module instance has run.
+ * The check is throttled per module instance, so tests that need a second
+ * check re-import the routes for a fresh instance.
+ */
+async function settle(app: Routes): Promise<void> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const res = await app.request('/remote-status')
+    const body: any = await res.json()
+    if (body.lastCheckedAt !== null) return
+    if (Date.now() > deadline) {
+      throw new Error(`remote check did not complete: ${body.error ?? 'timeout'}`)
+    }
+    await new Promise((r) => setTimeout(r, 50))
+  }
+}
+
+function post(app: Routes, path: string, body: unknown): Promise<Response> {
+  return app.request(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+beforeEach(() => {
+  // Keep the suite hermetic against a developer's own environment: without
+  // these stubs an ambient GIT_PAT/GIT_REPO_URL would rewrite the fixture's
+  // origin URL to a remote that does not exist.
+  vi.stubEnv('GIT_PAT', '')
+  vi.stubEnv('GIT_REPO_URL', '')
+  vi.stubEnv('GIT_BRANCH', '')
+})
+
+afterEach(async () => {
+  // Let any in-flight remote check finish before the fixture is deleted.
+  if (lastApp) await settle(lastApp).catch(() => {})
+  lastApp = undefined
+  vi.unstubAllEnvs()
+  vi.resetModules()
+})
+
+afterAll(async () => {
+  await Promise.all(createdDirs.map((d) => rm(d, { recursive: true, force: true })))
+  await Promise.all(
+    mockServers.map((s) => new Promise<void>((r) => s.close(() => r())))
+  )
+})
+
+describe('git routes in PR-based edits mode', () => {
+  it('blocks commits on the base branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'nope' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('working branch')
+
+    // Nothing was committed.
+    expect(await git(fx.root, 'rev-list', '--count', 'HEAD')).toBe('2')
+  })
+
+  it('allows commits on a working branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'edit' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+
+    expect(await git(fx.root, 'rev-list', '--count', 'HEAD')).toBe('3')
+  })
+
+  it('pushes the working branch when committing with push', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'edit', push: true })
+    expect(res.status).toBe(200)
+
+    const refs = await git(fx.root, 'ls-remote', 'origin', 'astrocms/test')
+    expect(refs).toContain('refs/heads/astrocms/test')
+  })
+
+  it('keeps committing on main in non-PR mode', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: false } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'edit' })
+    expect(res.status).toBe(200)
+
+    expect(await git(fx.root, 'rev-list', '--count', 'HEAD')).toBe('3')
+  })
+
+  it('exposes the branch object in /status with PR mode on', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await settle(app)
+    let body: any = await (await app.request('/status')).json()
+    expect(body.branch).toEqual({
+      prMode: true,
+      currentBranch: 'main',
+      baseBranch: 'main',
+      onBaseBranch: true,
+      aheadOfBase: 0,
+      behindBase: 0,
+      unpushed: 0,
+      lastCommitSubject: 'config',
+      openPr: null,
+    })
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    body = await (await app.request('/status')).json()
+    expect(body.branch.currentBranch).toBe('astrocms/test')
+    expect(body.branch.onBaseBranch).toBe(false)
+  })
+
+  it('omits the branch object in /status without PR mode', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await settle(app)
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch).toBeUndefined()
+  })
+
+  it('tracks ahead/behind against the base branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    // One commit ahead of main on a working branch.
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'ahead')
+
+    let app = await importRoutes(fx.root)
+    await settle(app)
+    let body: any = await (await app.request('/status')).json()
+    expect(body.branch.aheadOfBase).toBe(1)
+    expect(body.branch.behindBase).toBe(0)
+    // Never pushed: no remote ref, so everything is unpushed.
+    expect(body.branch.unpushed).toBe(1)
+
+    // Advance origin/main through a second clone.
+    const other = join(fx.dir, 'other')
+    await git(fx.dir, 'clone', fx.origin, other)
+    await git(other, 'config', 'user.email', 'other@test.local')
+    await git(other, 'config', 'user.name', 'Other')
+    await writeFile(join(other, 'index.md'), '# from main\n')
+    await git(other, 'add', '.')
+    await git(other, 'commit', '-m', 'main moves')
+    await git(other, 'push', 'origin', 'main')
+
+    // Fresh module instance: the remote check is throttled per instance.
+    app = await importRoutes(fx.root)
+    await settle(app)
+    body = await (await app.request('/status')).json()
+    expect(body.branch.aheadOfBase).toBe(1)
+    expect(body.branch.behindBase).toBe(1)
+    expect(body.branch.unpushed).toBe(1)
+  })
+
+  it('reports aheadOfBase immediately after /commit, before the remote check settles', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    const app = await importRoutes(fx.root)
+
+    // Commit through the routes (the UI path). No settle(): the fire-and-
+    // forget remote check may still be in flight, but /status derives
+    // ahead/behind from local refs, so the count must already be correct.
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    const staged = await post(app, '/stage', { paths: ['index.md'] })
+    expect(staged.status).toBe(200)
+    const res = await post(app, '/commit', { message: 'ahead' })
+    expect(res.status).toBe(200)
+
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.aheadOfBase).toBe(1)
+    expect(body.branch.behindBase).toBe(0)
+    // Never pushed: no remote ref, so everything is unpushed.
+    expect(body.branch.unpushed).toBe(1)
+  })
+
+  it('refuses to pull the base branch in PR mode', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/pull', {})
+    expect(res.status).toBe(400)
+  })
+
+  it('ASTROCMS_PR_BASED_EDITS=1 enables the guards without a config file', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+
+    vi.stubEnv('ASTROCMS_PR_BASED_EDITS', '1')
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'nope' })
+    expect(res.status).toBe(400)
+
+    const status: any = await (await app.request('/status')).json()
+    expect(status.branch.prMode).toBe(true)
+  })
+})
+
+describe('git routes: branch endpoints (PR-based edits)', () => {
+  it('creates a working branch from the latest base', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    // Advance origin/main so the local main is stale.
+    await advanceOrigin(fx, 'main', 'other.md', 'from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, branch: 'astrocms/test' })
+
+    expect(await git(fx.root, 'branch', '--show-current')).toBe('astrocms/test')
+    // The branch starts from the freshly fetched base, not stale local main.
+    expect(await readFile(join(fx.root, 'other.md'), 'utf-8')).toBe(
+      'from main\n'
+    )
+  })
+
+  it('rejects invalid branch names', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    for (const name of ['', '   ', 'bad name', 'foo..bar', '-leading-dash']) {
+      const res = await post(app, '/branch', { name })
+      expect(res.status).toBe(400)
+    }
+
+    // Nothing was created.
+    expect(
+      await git(fx.root, 'branch', '--list', '--format=%(refname:short)')
+    ).toBe('main')
+  })
+
+  it('rejects the base branch name', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/branch', { name: 'main' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('base branch')
+  })
+
+  it('requires a clean worktree to create a branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# dirty\n')
+
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(400)
+
+    expect(
+      await git(fx.root, 'branch', '--list', '--format=%(refname:short)')
+    ).toBe('main')
+  })
+
+  it('rejects an existing local branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await git(fx.root, 'branch', 'astrocms/test')
+
+    const res = await post(app, '/branch', { name: 'astrocms/test' })
+    expect(res.status).toBe(409)
+  })
+
+  it('branch endpoints are disabled outside PR mode', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(
+      400
+    )
+    expect((await post(app, '/branch/update', {})).status).toBe(400)
+  })
+
+  it('update merges the latest base into the working branch', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'work')
+
+    // A non-conflicting change on origin/main.
+    await advanceOrigin(fx, 'main', 'other.md', 'from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.updated).toBe(true)
+
+    // Still on the working branch, now containing both changes.
+    expect(await git(fx.root, 'branch', '--show-current')).toBe('astrocms/test')
+    expect(await readFile(join(fx.root, 'other.md'), 'utf-8')).toBe(
+      'from main\n'
+    )
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# v2\n')
+  })
+
+  it('update is a no-op when already up to date', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.updated).toBe(false)
+  })
+
+  it('update returns 409 on conflict and leaves the merge in progress', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'work')
+
+    // Conflicting change on origin/main (same file, same lines).
+    await advanceOrigin(fx, 'main', 'index.md', '# from main\n', 'main moves')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.ok).toBe(false)
+    expect(body.error.toLowerCase()).toContain('conflict')
+
+    // The merge is left in progress so the user can resolve it.
+    expect(await git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')).not.toBe('')
+
+    // Resolve by discarding the conflicted file (keeps our side), then commit
+    // to conclude the merge.
+    expect((await post(app, '/discard', { path: 'index.md' })).status).toBe(200)
+    expect((await post(app, '/commit', { message: 'resolve' })).status).toBe(200)
+
+    await expect(
+      git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')
+    ).rejects.toThrow()
+
+    // The concluding commit is a merge commit (two parents) and keeps our side.
+    const head = await git(fx.root, 'rev-list', '--parents', '-n', '1', 'HEAD')
+    expect(head.trim().split(/\s+/)).toHaveLength(3)
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# v2\n')
+  })
+
+  it('update refuses to run on the base branch or a detached HEAD', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    // On the base branch.
+    const onBase = await post(app, '/branch/update', {})
+    expect(onBase.status).toBe(400)
+
+    // Detached HEAD.
+    await git(fx.root, 'checkout', '--detach')
+    const detached = await post(app, '/branch/update', {})
+    expect(detached.status).toBe(400)
+  })
+
+  it('update requires a clean worktree', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# dirty\n')
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/branch/update', {})
+    expect(res.status).toBe(400)
+
+    // No merge was started.
+    await expect(
+      git(fx.root, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')
+    ).rejects.toThrow()
+  })
+})
+
+describe('git routes (existing behavior)', () => {
+  it('auto ff-pulls the configured branch when behind and clean', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+
+    await advanceOrigin(fx, 'main', 'index.md', '# from remote\n', 'remote edit')
+
+    const app = await importRoutes(fx.root)
+    await settle(app)
+    const remote: any = await (await app.request('/remote-status')).json()
+
+    expect(remote.updateAvailable).toBe(false)
+    expect(remote.behind).toBe(0)
+    expect(remote.lastPulledAt).not.toBeNull()
+
+    // The site worktree now contains the remote commit.
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe(
+      '# from remote\n'
+    )
+  })
+
+  it('flags an available update without pulling when the worktree is dirty', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+
+    await advanceOrigin(fx, 'main', 'index.md', '# from remote\n', 'remote edit')
+    await writeFile(join(fx.root, 'index.md'), '# local dirty\n')
+
+    const app = await importRoutes(fx.root)
+    await settle(app)
+    const remote: any = await (await app.request('/remote-status')).json()
+
+    expect(remote.updateAvailable).toBe(true)
+    expect(remote.behind).toBe(1)
+    expect(remote.lastPulledAt).toBeNull()
+
+    // Nothing was pulled.
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe(
+      '# local dirty\n'
+    )
+  })
+
+  it('/pull pulls the branch from GIT_BRANCH', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+
+    // A release branch on origin, checked out in the site.
+    await git(fx.root, 'switch', '-c', 'release')
+    await git(fx.root, 'push', '-u', 'origin', 'release')
+
+    await advanceOrigin(fx, 'release', 'index.md', '# release update\n', 'release edit')
+
+    vi.stubEnv('GIT_BRANCH', 'release')
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/pull', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe(
+      '# release update\n'
+    )
+  })
+
+  it('/commit with push pushes the branch from GIT_BRANCH', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'release')
+    await git(fx.root, 'push', '-u', 'origin', 'release')
+
+    vi.stubEnv('GIT_BRANCH', 'release')
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# local edit\n')
+    await git(fx.root, 'add', '.')
+
+    const res = await post(app, '/commit', { message: 'edit', push: true })
+    expect(res.status).toBe(200)
+
+    const head = await git(fx.root, 'rev-parse', 'HEAD')
+    const refs = await git(fx.root, 'ls-remote', 'origin', 'release')
+    expect(refs.split('\t')[0]).toBe(head)
+  })
+
+  it('auto ff-pulls a working branch behind its own remote in PR mode', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+
+    await git(fx.root, 'switch', '-c', 'astrocms/test')
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    await git(fx.root, 'commit', '-m', 'first')
+    await git(fx.root, 'push', '-u', 'origin', 'astrocms/test')
+
+    await advanceOrigin(fx, 'astrocms/test', 'index.md', '# v3\n', 'remote edit')
+
+    const app = await importRoutes(fx.root)
+    await settle(app)
+    const remote: any = await (await app.request('/remote-status')).json()
+
+    expect(remote.updateAvailable).toBe(false)
+    expect(remote.behind).toBe(0)
+    expect(remote.lastPulledAt).not.toBeNull()
+
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# v3\n')
+  })
+
+  it('/stage and /unstage toggle the staged flag', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    // Tracked modification.
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    let body: any = await (await app.request('/status')).json()
+    expect(body.files.find((f: any) => f.path === 'index.md')).toEqual({
+      status: 'M',
+      staged: false,
+      path: 'index.md',
+    })
+
+    expect((await post(app, '/stage', { paths: ['index.md'] })).status).toBe(200)
+    body = await (await app.request('/status')).json()
+    expect(body.files.find((f: any) => f.path === 'index.md')?.staged).toBe(true)
+
+    expect((await post(app, '/unstage', { paths: ['index.md'] })).status).toBe(200)
+    body = await (await app.request('/status')).json()
+    expect(body.files.find((f: any) => f.path === 'index.md')?.staged).toBe(false)
+
+    // Untracked file.
+    await writeFile(join(fx.root, 'new.txt'), 'hello\n')
+    body = await (await app.request('/status')).json()
+    expect(body.files.find((f: any) => f.path === 'new.txt')?.staged).toBe(false)
+
+    expect((await post(app, '/stage', { paths: ['new.txt'] })).status).toBe(200)
+    body = await (await app.request('/status')).json()
+    expect(body.files.find((f: any) => f.path === 'new.txt')?.staged).toBe(true)
+  })
+
+  it('/diffs returns per-file diffs including untracked files', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    await writeFile(join(fx.root, 'new.txt'), 'hello world\n')
+
+    const body: any = await (await app.request('/diffs')).json()
+
+    expect(Object.keys(body.diffs).sort()).toEqual(['index.md', 'new.txt'])
+    expect(body.diffs['index.md']).toContain('-# Hello')
+    expect(body.diffs['index.md']).toContain('+# Changed')
+    // Untracked files are synthesized as added-file diffs.
+    expect(body.diffs['new.txt']).toContain('+hello world')
+  })
+
+  it('/discard restores tracked files and deletes untracked ones', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    // Tracked modification is restored.
+    await writeFile(join(fx.root, 'index.md'), '# Changed\n')
+    expect((await post(app, '/discard', { path: 'index.md' })).status).toBe(200)
+    expect(await readFile(join(fx.root, 'index.md'), 'utf-8')).toBe('# Hello\n')
+
+    // Untracked file is deleted.
+    await writeFile(join(fx.root, 'new.txt'), 'hello\n')
+    expect((await post(app, '/discard', { path: 'new.txt' })).status).toBe(200)
+    await expect(access(join(fx.root, 'new.txt'))).rejects.toThrow()
+
+    // Path traversal is rejected.
+    expect((await post(app, '/discard', { path: '../outside.txt' })).status).toBe(400)
+  })
+})
+
+describe('git routes: push and PR (PR-based edits)', () => {
+  it('pushes the working branch and creates a PR when none is open', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', { title: 'My PR' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.pushed).toBe(true)
+    expect(body.created).toBe(true)
+    expect(body.pr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+
+    // The branch actually landed on the (local) remote.
+    const refs = await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')
+    expect(refs).toContain('refs/heads/astrocms/test')
+
+    // The PR was created with the right head/base, title and body.
+    expect(mock.createdBodies).toHaveLength(1)
+    const created = mock.createdBodies[0]
+    expect(created.title).toBe('My PR')
+    expect(created.head).toBe('astrocms/test')
+    expect(created.base).toBe('main')
+    expect(created.body).toContain('- M index.md')
+    expect(created.body).toContain('Created with AstroCMS')
+
+    // The status refetch right after the push (the UI invalidates gitStatus)
+    // already shows the PR link — no wait for the next background lookup.
+    const status: any = await (await app.request('/status')).json()
+    expect(status.branch.openPr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+    // Everything is on the remote working branch now: nothing left to push.
+    expect(status.branch.unpushed).toBe(0)
+  })
+
+  it('pushes only when an open PR already exists (no title needed)', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', {})
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.pushed).toBe(true)
+    expect(body.created).toBeUndefined()
+    expect(body.pr.number).toBe(7)
+
+    // No new PR was created.
+    expect(mock.createdBodies).toHaveLength(0)
+
+    const refs = await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')
+    expect(refs).toContain('refs/heads/astrocms/test')
+  })
+
+  it('requires a title when no open PR exists and pushes nothing', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+    await writeFile(join(fx.root, 'index.md'), '# v2\n')
+    await git(fx.root, 'add', '.')
+    expect((await post(app, '/commit', { message: 'edit' })).status).toBe(200)
+
+    const res = await post(app, '/push', {})
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('title')
+
+    // Nothing was pushed and no PR was created.
+    expect(await git(fx.root, 'ls-remote', fx.origin, 'astrocms/test')).toBe('')
+    expect(mock.createdBodies).toHaveLength(0)
+  })
+
+  it('rejects push on the base branch in PR mode', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    const res = await post(app, '/push', { title: 'nope' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('never pushes')
+  })
+
+  it('/push is disabled outside PR mode', async () => {
+    const fx = await makeFixture(null)
+    createdDirs.push(fx.dir)
+    const app = await importRoutes(fx.root)
+
+    const res = await post(app, '/push', { title: 'nope' })
+    expect(res.status).toBe(400)
+  })
+
+  it('exposes the open PR in /status', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr).toEqual({
+      number: 7,
+      title: 'My PR',
+      url: 'https://github.com/testowner/testrepo/pull/7',
+    })
+  })
+
+  it('force=1 re-checks the remote even inside the throttle window', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.pulls = [MOCK_PR]
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    let body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr?.number).toBe(7)
+
+    // The PR gets merged on GitHub. A plain /status still serves the cached
+    // state (the background check is throttled)...
+    mock.pulls = []
+    body = await (await app.request('/status')).json()
+    expect(body.branch.openPr?.number).toBe(7)
+
+    // ...but the refresh button's forced check sees it right away.
+    body = await (await app.request('/status?force=1')).json()
+    expect(body.branch.openPr).toBeNull()
+  })
+
+  it('surfaces a GitHub lookup failure as openPrError', async () => {
+    const fx = await makeFixture({ git: { prBasedEdits: true } })
+    createdDirs.push(fx.dir)
+    await setGitHubOrigin(fx)
+
+    const mock = await startMockGitHub()
+    mock.getStatus = 500
+    vi.stubEnv('GIT_PAT', 'test-pat')
+    vi.stubEnv('ASTROCMS_GITHUB_API_BASE', mock.base)
+
+    const app = await importRoutes(fx.root)
+    expect((await post(app, '/branch', { name: 'astrocms/test' })).status).toBe(200)
+
+    await settle(app)
+    const body: any = await (await app.request('/status')).json()
+    expect(body.branch.openPr).toBeNull()
+    expect(body.branch.openPrError).toContain('GitHub API 500')
+
+    // The git state itself is unaffected.
+    expect(body.branch.currentBranch).toBe('astrocms/test')
+  })
+})

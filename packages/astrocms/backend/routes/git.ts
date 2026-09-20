@@ -4,6 +4,13 @@ import { promisify } from 'util'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
 import { ROOT_DIR } from '../root.js'
+import { loadConfig, type GitFlowConfig } from '../config.js'
+import {
+  createPullRequest,
+  findOpenPr,
+  parseRepoFromUrl,
+  type GitHubPr,
+} from '../github.js'
 
 const exec = promisify(execFile)
 
@@ -39,6 +46,31 @@ function getBranch() {
   return process.env.GIT_BRANCH || 'main'
 }
 
+async function getGitSettings(): Promise<GitFlowConfig> {
+  const config = await loadConfig()
+  // The git block is optional in the type (optional section in
+  // astrocms.json); loadConfig fills it with defaults, so this fallback is
+  // a safety net only.
+  return config.git ?? { prBasedEdits: false, baseBranch: 'main' }
+}
+
+/**
+ * The branch HEAD is currently on. Empty string on a detached HEAD.
+ */
+async function getCurrentBranch(): Promise<string> {
+  const out = await git('branch', '--show-current')
+  return out.trim()
+}
+
+/** Subject of the latest commit (HEAD); empty when there are no commits. */
+async function getLastCommitSubject(): Promise<string> {
+  try {
+    return (await git('log', '-1', '--pretty=%s')).trim()
+  } catch {
+    return ''
+  }
+}
+
 async function ensureAuthedRemote() {
   const pat = process.env.GIT_PAT
   const repoUrl = process.env.GIT_REPO_URL
@@ -56,14 +88,40 @@ async function isWorktreeClean(): Promise<boolean> {
   return status.trim().length === 0
 }
 
-async function countBehind(): Promise<number> {
-  const branch = getBranch()
+async function countCommits(range: string): Promise<number> {
   try {
-    const out = await git('rev-list', '--count', `HEAD..origin/${branch}`)
+    const out = await git('rev-list', '--count', range)
     const n = parseInt(out.trim(), 10)
     return Number.isFinite(n) ? n : 0
   } catch {
     return 0
+  }
+}
+
+async function countBehind(branch: string): Promise<number> {
+  return countCommits(`HEAD..origin/${branch}`)
+}
+
+/** True when the remote-tracking ref for `branch` exists locally. */
+async function hasRemoteRef(branch: string): Promise<boolean> {
+  try {
+    await git('show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Fetch one branch from origin. Returns false when the branch does not exist
+ * on the remote yet (e.g. a working branch that was never pushed).
+ */
+async function fetchBranch(branch: string): Promise<boolean> {
+  try {
+    await git('fetch', 'origin', branch)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -75,6 +133,8 @@ interface RemoteState {
   lastCheckedAt: number | null
   lastPulledAt: number | null
   error?: string
+  openPr: GitHubPr | null
+  openPrError?: string
 }
 
 const remoteState: RemoteState = {
@@ -82,30 +142,91 @@ const remoteState: RemoteState = {
   behind: 0,
   lastCheckedAt: null,
   lastPulledAt: null,
+  openPr: null,
+}
+
+/**
+ * Sync the working branch with its remote ref when it is behind and the
+ * worktree is clean (ff-only). Shared by both modes.
+ */
+async function syncWorkingBranch(branch: string): Promise<void> {
+  const behind = await countBehind(branch)
+  if (behind > 0) {
+    const clean = await isWorktreeClean()
+    if (clean) {
+      await git('pull', '--ff-only', 'origin', branch)
+      remoteState.behind = 0
+      remoteState.updateAvailable = false
+      remoteState.lastPulledAt = Date.now()
+    } else {
+      remoteState.behind = behind
+      remoteState.updateAvailable = true
+    }
+  } else {
+    remoteState.behind = 0
+    remoteState.updateAvailable = false
+  }
 }
 
 async function checkRemote(): Promise<void> {
   try {
+    const settings = await getGitSettings()
     await ensureAuthedRemote()
-    await git('fetch', 'origin', getBranch())
-    const behind = await countBehind()
-    remoteState.lastCheckedAt = Date.now()
-    remoteState.error = undefined
-    if (behind > 0) {
-      const clean = await isWorktreeClean()
-      if (clean) {
-        await git('pull', '--ff-only', 'origin', getBranch())
+
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+
+      // The base branch must exist on the remote; a failure here is a real
+      // error and lands in remoteState.error. /status derives ahead/behind
+      // from the local origin/<base> ref, so this fetch only keeps that ref
+      // fresh.
+      await git('fetch', 'origin', settings.baseBranch)
+
+      if (current && current !== settings.baseBranch) {
+        // The working branch may not exist on the remote yet.
+        if (await fetchBranch(current)) {
+          await syncWorkingBranch(current)
+        } else {
+          remoteState.behind = 0
+          remoteState.updateAvailable = false
+        }
+      } else {
+        // On the base branch: no working-branch ref to sync.
         remoteState.behind = 0
         remoteState.updateAvailable = false
-        remoteState.lastPulledAt = Date.now()
-      } else {
-        remoteState.behind = behind
-        remoteState.updateAvailable = true
+      }
+
+      // Best-effort open-PR lookup for the working branch. Skipped when the
+      // origin is not a GitHub URL or no PAT is configured; failures land in
+      // openPrError without affecting the git state above.
+      remoteState.openPr = null
+      remoteState.openPrError = undefined
+      if (current && current !== settings.baseBranch) {
+        try {
+          // Read the stored origin URL straight from config: `git remote
+          // get-url` would apply url.*.insteadOf rewrites, which can turn a
+          // GitHub URL into a transport/mirror URL that no longer names the repo.
+          const originUrl = await git('config', '--get', 'remote.origin.url')
+          const parsed = parseRepoFromUrl(originUrl)
+          if (parsed && process.env.GIT_PAT) {
+            remoteState.openPr = await findOpenPr(
+              parsed.owner,
+              parsed.repo,
+              current
+            )
+          }
+        } catch (err) {
+          remoteState.openPrError = String((err as any)?.message ?? err)
+        }
       }
     } else {
-      remoteState.behind = 0
-      remoteState.updateAvailable = false
+      const branch = getBranch()
+      await git('fetch', 'origin', branch)
+      await syncWorkingBranch(branch)
     }
+
+    remoteState.lastCheckedAt = Date.now()
+    remoteState.error = undefined
   } catch (err) {
     remoteState.error = String((err as any)?.message ?? err)
     remoteState.lastCheckedAt = Date.now()
@@ -113,7 +234,17 @@ async function checkRemote(): Promise<void> {
 }
 
 const REMOTE_CHECK_THROTTLE_MS = 60_000
-let checkInFlight = false
+let checkInFlight: Promise<void> | null = null
+
+/** Start a remote check if none is running; returns the shared promise. */
+function runRemoteCheck(): Promise<void> {
+  if (!checkInFlight) {
+    checkInFlight = checkRemote().finally(() => {
+      checkInFlight = null
+    })
+  }
+  return checkInFlight
+}
 
 /**
  * Fire-and-forget remote check, called from the hot path (`/status`,
@@ -121,13 +252,18 @@ let checkInFlight = false
  * a burst of UI requests doesn't flood `git fetch`.
  */
 function checkRemoteIfStale(): void {
-  if (checkInFlight) return
   const last = remoteState.lastCheckedAt ?? 0
   if (Date.now() - last < REMOTE_CHECK_THROTTLE_MS) return
-  checkInFlight = true
-  checkRemote().finally(() => {
-    checkInFlight = false
-  })
+  void runRemoteCheck()
+}
+
+/**
+ * Await a fresh remote check (the UI's refresh button). Reuses an in-flight
+ * check; otherwise starts one even inside the throttle window, so external
+ * changes (a merged PR, a push to main) show up in the very next response.
+ */
+async function awaitRemoteCheck(): Promise<void> {
+  await runRemoteCheck()
 }
 
 export const gitRoutes = new Hono()
@@ -174,12 +310,42 @@ function parsePorcelainZ(raw: string): PorcelainEntry[] {
   return out
 }
 
+/**
+ * Git + PR state for the review UI, present in `/status` when PR-based edits
+ * are enabled. `openPr` is filled by the GitHub client (see
+ * docs/pr-based-edits.md, phase 3); until then it is always null.
+ */
+interface BranchInfo {
+  prMode: boolean
+  currentBranch: string
+  baseBranch: string
+  onBaseBranch: boolean
+  aheadOfBase: number
+  behindBase: number
+  /**
+   * Commits not yet on the remote working branch. Drives the push
+   * affordance: aheadOfBase stays > 0 until the PR merges, so it cannot
+   * tell us whether there is anything left to push. 0 on the base branch.
+   */
+  unpushed: number
+  /** Subject of HEAD; the review UI offers it as the default PR title. */
+  lastCommitSubject: string
+  openPr: GitHubPr | null
+  openPrError?: string
+}
+
 gitRoutes.get('/status', async (c) => {
   // Piggyback a throttled remote check on the most-called endpoint. Non
   // blocking: the request returns immediately with whatever we know now;
   // the follow-up fetch updates `lastPulledAt` and the UI detects the
-  // change on its next status fetch.
-  checkRemoteIfStale()
+  // change on its next status fetch. `?force=1` (the UI's refresh button)
+  // waits for a fresh check instead, so e.g. a PR merged on GitHub is
+  // reflected immediately rather than after the next throttle window.
+  if (c.req.query('force') === '1') {
+    await awaitRemoteCheck()
+  } else {
+    checkRemoteIfStale()
+  }
   try {
     const raw = await git('status', '--porcelain', '-z', '-uall')
     const files = parsePorcelainZ(raw)
@@ -199,7 +365,45 @@ gitRoutes.get('/status', async (c) => {
       // Sort by path so the row order stays stable when a file toggles
       // between staged and unstaged (git's native output groups by status).
       .sort((a, b) => a.path.localeCompare(b.path))
-    return c.json({ files, remote: remoteSnapshot() })
+
+    const settings = await getGitSettings()
+    let branch: BranchInfo | undefined
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+      // Ahead/behind are derived from local refs at response time instead of
+      // being cached by the background check: HEAD moves on every commit, so
+      // a cached count would lag one status call behind (the check that
+      // refreshes it only finishes after this response is sent). The
+      // throttled checkRemote() keeps origin/<base> fresh; when the ref does
+      // not exist yet (fresh clone, first fetch in flight) both counts are 0.
+      const aheadOfBase = await countCommits(`origin/${settings.baseBranch}..HEAD`)
+      const behindBase = await countCommits(`HEAD..origin/${settings.baseBranch}`)
+
+      // A never-pushed branch has no remote ref: everything is unpushed.
+      let unpushed = 0
+      if (current && current !== settings.baseBranch) {
+        unpushed = (await hasRemoteRef(current))
+          ? await countCommits(`origin/${current}..HEAD`)
+          : aheadOfBase
+      }
+
+      branch = {
+        prMode: true,
+        currentBranch: current,
+        baseBranch: settings.baseBranch,
+        onBaseBranch: current === settings.baseBranch,
+        aheadOfBase,
+        behindBase,
+        unpushed,
+        lastCommitSubject: await getLastCommitSubject(),
+        openPr: remoteState.openPr,
+        ...(remoteState.openPrError
+          ? { openPrError: remoteState.openPrError }
+          : {}),
+      }
+    }
+
+    return c.json({ files, remote: remoteSnapshot(), ...(branch ? { branch } : {}) })
   } catch (err) {
     return c.json({ error: String(err) }, 500)
   }
@@ -321,14 +525,39 @@ gitRoutes.post('/commit', async (c) => {
     return c.json({ error: 'Missing commit message' }, 400)
   }
 
+  const settings = await getGitSettings()
+  let currentBranch: string | undefined
+  if (settings.prBasedEdits) {
+    currentBranch = await getCurrentBranch()
+    if (!currentBranch) {
+      return c.json(
+        { error: 'Detached HEAD: check out a branch before committing.' },
+        400
+      )
+    }
+    if (currentBranch === settings.baseBranch) {
+      return c.json(
+        {
+          error: `PR-based edits are enabled, so the CMS never commits on '${settings.baseBranch}'. Create a working branch first.`,
+        },
+        400
+      )
+    }
+  }
+
   try {
     const commitOutput = await git('commit', '-m', body.message)
 
     let pushOutput = ''
     if (body.push) {
       await ensureAuthedRemote()
-      pushOutput = await git('push', 'origin', getBranch())
+      const branch = settings.prBasedEdits ? currentBranch! : getBranch()
+      pushOutput = await git('push', 'origin', branch)
     }
+
+    // A commit moves HEAD, so cached ahead/behind counts are stale; force a
+    // fresh remote check on the next status poll (drives the push affordance).
+    remoteState.lastCheckedAt = null
 
     return c.json({ ok: true, commit: commitOutput, push: pushOutput })
   } catch (err) {
@@ -350,13 +579,272 @@ gitRoutes.post('/pull', async (c) => {
         400
       )
     }
-    const out = await git('pull', '--ff-only', 'origin', getBranch())
+    const settings = await getGitSettings()
+    let branch = getBranch()
+    if (settings.prBasedEdits) {
+      const current = await getCurrentBranch()
+      if (!current || current === settings.baseBranch) {
+        return c.json(
+          {
+            ok: false,
+            error: `PR-based edits are enabled; pull a working branch, not '${settings.baseBranch}'.`,
+          },
+          400
+        )
+      }
+      branch = current
+    }
+    const out = await git('pull', '--ff-only', 'origin', branch)
     remoteState.behind = 0
     remoteState.updateAvailable = false
     remoteState.lastPulledAt = Date.now()
     return c.json({ ok: true, output: out })
   } catch (err) {
     return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
+// Create a working branch from the latest base (PR-based edits only).
+gitRoutes.post('/branch', async (c) => {
+  const body = await c.req.json<{ name?: string }>()
+  const name = (body.name ?? '').trim()
+  if (!name) {
+    return c.json({ error: 'Missing branch name' }, 400)
+  }
+
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  try {
+    // The name is passed as a positional argument to git below, so reject
+    // option-like input up front; check-ref-format rejects the rest.
+    if (name.startsWith('-')) {
+      return c.json({ error: `Invalid branch name '${name}'` }, 400)
+    }
+    try {
+      await git('check-ref-format', '--branch', name)
+    } catch {
+      return c.json({ error: `Invalid branch name '${name}'` }, 400)
+    }
+    if (name === settings.baseBranch) {
+      return c.json(
+        { error: `Cannot create a branch with the base branch name '${settings.baseBranch}'.` },
+        400
+      )
+    }
+
+    const clean = await isWorktreeClean()
+    if (!clean) {
+      return c.json(
+        { ok: false, error: 'Working tree is not clean. Commit or discard changes first.' },
+        400
+      )
+    }
+
+    // Refuse to clobber an existing local branch.
+    try {
+      await git('show-ref', '--verify', '--quiet', `refs/heads/${name}`)
+      return c.json({ error: `Branch '${name}' already exists.` }, 409)
+    } catch {
+      // No such local branch: proceed.
+    }
+
+    await ensureAuthedRemote()
+    // Start from the freshly fetched base so the branch never lags behind.
+    await git('fetch', 'origin', settings.baseBranch)
+    await git('switch', '-c', name, `origin/${settings.baseBranch}`)
+
+    // The branch switch invalidates the cached ahead/behind counts; force a
+    // fresh remote check on the next status poll.
+    remoteState.lastCheckedAt = null
+
+    return c.json({ ok: true, branch: name })
+  } catch (err) {
+    return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
+// Merge the latest base into the current working branch (PR-based edits only).
+gitRoutes.post('/branch/update', async (c) => {
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  try {
+    const current = await getCurrentBranch()
+    if (!current) {
+      return c.json(
+        { error: 'Detached HEAD: check out a working branch first.' },
+        400
+      )
+    }
+    if (current === settings.baseBranch) {
+      return c.json(
+        { error: `You are on the base branch '${settings.baseBranch}'; update a working branch instead.` },
+        400
+      )
+    }
+
+    const clean = await isWorktreeClean()
+    if (!clean) {
+      return c.json(
+        { ok: false, error: 'Working tree is not clean. Commit or discard changes first.' },
+        400
+      )
+    }
+
+    await ensureAuthedRemote()
+    await git('fetch', 'origin', settings.baseBranch)
+
+    // Merge (not rebase): it never rewrites pushed history, so an open PR
+    // doesn't need a force-push. On conflict the merge is left in progress:
+    // the review UI shows the conflicted files, and resolving (or discarding)
+    // them plus a commit concludes the merge.
+    try {
+      const out = await git('merge', `origin/${settings.baseBranch}`)
+      return c.json({ ok: true, updated: !/already up to date/i.test(out) })
+    } catch (err: any) {
+      const message = String(err?.message ?? err)
+      return c.json(
+        { ok: false, error: `Merge conflict while updating from '${settings.baseBranch}': ${message}` },
+        409
+      )
+    }
+  } catch (err) {
+    return c.json({ error: String((err as any)?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * PR body: the list of files changed on the branch (three-dot diff against
+ * the base, so only this branch's commits count) plus a fixed footer.
+ * `nameStatusOutput` is the output of
+ * `git diff --name-status origin/<base>...HEAD`; renames (R*) carry the new
+ * path as their last field.
+ */
+function buildPrBody(nameStatusOutput: string): string {
+  const lines = nameStatusOutput.split('\n').filter((l) => l.trim())
+  const fileList = lines.length
+    ? lines
+        .map((line) => {
+          const [status, ...paths] = line.split('\t')
+          return `- ${status} ${paths[paths.length - 1]}`
+        })
+        .join('\n')
+    : '- (no file changes)'
+  return `## Changed files\n\n${fileList}\n\n---\nCreated with AstroCMS`
+}
+
+// Push the working branch and open its pull request (or reuse an existing
+// one). PR-based edits only; non-PR mode keeps using /commit?push=true.
+gitRoutes.post('/push', async (c) => {
+  const body = await c.req.json<{ title?: string }>()
+
+  const settings = await getGitSettings()
+  if (!settings.prBasedEdits) {
+    return c.json(
+      { error: 'PR-based edits are disabled; enable git.prBasedEdits in astrocms.json.' },
+      400
+    )
+  }
+
+  const current = await getCurrentBranch()
+  if (!current) {
+    return c.json(
+      { error: 'Detached HEAD: check out a working branch first.' },
+      400
+    )
+  }
+  if (current === settings.baseBranch) {
+    return c.json(
+      { error: `PR-based edits are enabled, so the CMS never pushes '${settings.baseBranch}'. Push a working branch instead.` },
+      400
+    )
+  }
+
+  try {
+    await ensureAuthedRemote()
+
+    // Resolve the GitHub repository from origin's URL before pushing, so a
+    // missing title or unparseable origin doesn't leave a stray push behind.
+    // Read the stored URL from config (not `git remote get-url`, which applies
+    // url.*.insteadOf rewrites that could hide the GitHub origin).
+    const originUrl = await git('config', '--get', 'remote.origin.url')
+    const parsed = parseRepoFromUrl(originUrl)
+    if (!parsed) {
+      return c.json(
+        { error: 'PR-based edits require a GitHub origin (https://github.com/<owner>/<repo>).' },
+        400
+      )
+    }
+    if (!process.env.GIT_PAT) {
+      return c.json(
+        { error: 'GIT_PAT is required to create pull requests.' },
+        400
+      )
+    }
+
+    const open = await findOpenPr(parsed.owner, parsed.repo, current)
+    if (!open) {
+      const title = (body.title ?? '').trim()
+      if (!title) {
+        return c.json({ error: 'Missing PR title' }, 400)
+      }
+    }
+
+    await git('push', '-u', 'origin', current)
+
+    if (open) {
+      // An open PR already exists: the push is enough. Cache it so the
+      // status refetch right after this call already shows the PR link.
+      remoteState.openPr = open
+      remoteState.openPrError = undefined
+      remoteState.lastCheckedAt = null
+      return c.json({ ok: true, pushed: true, pr: open })
+    }
+
+    await git('fetch', 'origin', settings.baseBranch)
+    const changed = await git(
+      'diff',
+      '--name-status',
+      `origin/${settings.baseBranch}...HEAD`
+    )
+
+    try {
+      const pr = await createPullRequest(parsed.owner, parsed.repo, {
+        title: (body.title ?? '').trim(),
+        body: buildPrBody(changed),
+        head: current,
+        base: settings.baseBranch,
+      })
+      // Cache the new PR so the status refetch right after this call already
+      // shows the link instead of waiting for the next background lookup.
+      remoteState.openPr = pr
+      remoteState.openPrError = undefined
+      remoteState.lastCheckedAt = null
+      return c.json({ ok: true, pushed: true, created: true, pr })
+    } catch (err) {
+      // The push already succeeded; report both facts so the UI can show
+      // that the branch is up while PR creation failed.
+      return c.json(
+        { ok: false, pushed: true, error: String((err as any)?.message ?? err) },
+        502
+      )
+    }
+  } catch (err) {
+    return c.json(
+      { ok: false, pushed: false, error: String((err as any)?.message ?? err) },
+      500
+    )
   }
 })
 

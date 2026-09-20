@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { TbDots, TbDownload } from 'react-icons/tb'
-import { useGitPull, useGitRemoteStatus } from '../../git/hooks/useGit.js'
+import {
+  useGitBranch,
+  useGitPull,
+  useGitRemoteStatus,
+} from '../../git/hooks/useGit.js'
 import { IconButton } from './IconButton.js'
 import { MenuItem } from './Menu.js'
 
@@ -9,6 +13,10 @@ export function HeaderMenu() {
   const rootRef = useRef<HTMLDivElement>(null)
   const pull = useGitPull()
   const { data: remote } = useGitRemoteStatus()
+  // PR-based edits: the base branch can't be pulled and working branches
+  // auto-sync in the background, so this menu has nothing to offer — the
+  // update affordance lives in the review UI (behindBase + update button).
+  const { data: branch } = useGitBranch()
   const updateAvailable = remote?.updateAvailable === true
 
   useEffect(() => {
@@ -26,6 +34,8 @@ export function HeaderMenu() {
       window.removeEventListener('keydown', onKey)
     }
   }, [open])
+
+  if (branch?.prMode === true) return null
 
   function handlePull() {
     pull.mutate(undefined, {

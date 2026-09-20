@@ -77,6 +77,32 @@ export interface GitFile {
   path: string
 }
 
+export interface GitPr {
+  number: number
+  title: string
+  url: string
+}
+
+/** Git + PR state, present in /status when PR-based edits are enabled. */
+export interface GitBranchInfo {
+  prMode: boolean
+  currentBranch: string
+  baseBranch: string
+  onBaseBranch: boolean
+  aheadOfBase: number
+  behindBase: number
+  /**
+   * Commits not yet on the remote working branch. Drives the push
+   * affordance: aheadOfBase stays > 0 until the PR merges, so it cannot
+   * tell us whether there is anything left to push. 0 on the base branch.
+   */
+  unpushed: number
+  /** Subject of HEAD; offered as the default PR title. */
+  lastCommitSubject: string
+  openPr: GitPr | null
+  openPrError?: string
+}
+
 export async function fetchTree(
   includes: { pattern: string; fields: string[] }[] = [],
   root: MediaRoot = 'content'
@@ -120,11 +146,22 @@ export async function saveFile(
   return res.json()
 }
 
-export async function fetchGitStatus(): Promise<{
+export interface GitStatusResponse {
   files: GitFile[]
   remote?: RemoteStatus
-}> {
-  const res = await authFetch(`/git/status`)
+  branch?: GitBranchInfo
+}
+
+/**
+ * `force` makes the backend run a fresh remote check (git fetch + open-PR
+ * lookup) before answering, bypassing its 60 s throttle. Used by the review
+ * UI's refresh button so external changes (merged PR, push to main) show up
+ * immediately.
+ */
+export async function fetchGitStatus(
+  force = false
+): Promise<GitStatusResponse> {
+  const res = await authFetch(`/git/status${force ? '?force=1' : ''}`)
   return res.json()
 }
 
@@ -206,6 +243,46 @@ export async function gitDiscard(path: string): Promise<{ ok: boolean }> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   })
+  return res.json()
+}
+
+/** Push the working branch and open (or reuse) its pull request. */
+export async function gitPush(
+  title: string
+): Promise<{
+  ok: boolean
+  pushed?: boolean
+  created?: boolean
+  pr?: GitPr
+  error?: string
+}> {
+  const res = await authFetch(`/git/push`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+  return res.json()
+}
+
+/** Create a new working branch from the latest base. */
+export async function gitCreateBranch(
+  name: string
+): Promise<{ ok: boolean; branch?: string; error?: string }> {
+  const res = await authFetch(`/git/branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  return res.json()
+}
+
+/** Merge the latest base into the current working branch. */
+export async function gitUpdateBranch(): Promise<{
+  ok: boolean
+  updated?: boolean
+  error?: string
+}> {
+  const res = await authFetch(`/git/branch/update`, { method: 'POST' })
   return res.json()
 }
 
