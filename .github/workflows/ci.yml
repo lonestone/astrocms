@@ -41,7 +41,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Lets npm attach a provenance attestation to the published tarball.
+      # npm authenticates through a short-lived OIDC token (trusted
+      # publishing), so the repository holds no npm credential. The trusted
+      # publisher is declared on npmjs.com: repository lonestone/astrocms,
+      # workflow ci.yml.
       id-token: write
 
     steps:
@@ -52,8 +55,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - name: Update npm
+        run: npm install -g npm@latest
 
       - name: Read package version
         id: version
@@ -81,9 +87,14 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: npm run build --workspace astrocms
 
+      # Run from the package directory rather than with --workspace: the OIDC
+      # exchange resolves the package from the current manifest. NPM_TOKEN is
+      # only a fallback for a package with no trusted publisher yet, such as a
+      # first release; it resolves to an empty value when the secret is absent.
       - name: Publish
         if: steps.check.outputs.exists == 'false'
-        run: npm publish --workspace astrocms --access public --provenance
+        working-directory: packages/astrocms
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
