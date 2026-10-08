@@ -10,6 +10,8 @@ import type {
   TSLiteralType,
   TSPropertySignature,
   TSTypeElement,
+  TSTypeParameterInstantiation,
+  TSTypeReference,
 } from '@babel/types'
 import { ROOT_DIR } from '../root.js'
 import { loadConfig } from '../config.js'
@@ -95,6 +97,21 @@ function unwrapExport(statement: Statement): Node | null {
 
 function isIdentifier(node: Node | null | undefined): node is Identifier {
   return !!node && node.type === 'Identifier'
+}
+
+/**
+ * Type-argument list of a type reference (`Array<T>` → `T`).
+ * Babel 7 stores it as `typeParameters`; Babel 8 renamed the runtime field to
+ * `typeArguments` (TypeScript's term) while @babel/types still declares the
+ * old name, so read whichever is present.
+ */
+function typeArgumentList(
+  node: TSTypeReference
+): TSTypeParameterInstantiation | null | undefined {
+  const renamed = node as TSTypeReference & {
+    typeArguments?: TSTypeParameterInstantiation | null
+  }
+  return renamed.typeArguments ?? node.typeParameters
 }
 
 function isPropertySignature(node: Node): node is TSPropertySignature {
@@ -184,10 +201,10 @@ function resolveType(
   } else if (
     typeNode.type === 'TSTypeReference' &&
     isIdentifier(typeNode.typeName) &&
-    typeNode.typeName.name === 'Array' &&
-    typeNode.typeArguments?.params.length === 1
+    typeNode.typeName.name === 'Array'
   ) {
-    elementType = typeNode.typeArguments.params[0]
+    const args = typeArgumentList(typeNode)
+    if (args?.params.length === 1) elementType = args.params[0]
   }
 
   if (elementType) {
