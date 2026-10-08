@@ -36,7 +36,7 @@ Asking the built-in Claude Code agent for a new post, with every tool call visib
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22.12+
 - An Astro project with content collections (`src/content.config.ts`)
 
 ## Quickstart
