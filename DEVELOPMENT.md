@@ -83,7 +83,7 @@ Populate `.env` using `.env.example` before running.
 
 ### Publishing
 
-The `.github/workflows/docker-publish.yml` workflow publishes to `ghcr.io/lonestone/astrocms` on every push to `main`. It reads the version from `packages/astrocms/package.json` and skips the build if that tag already exists on the registry. To ship a new image, bump the version in `packages/astrocms/package.json` and push to `main`. The workflow tags each successful build with `X.Y.Z`, `X.Y`, and `latest`, and builds for both `linux/amd64` and `linux/arm64`.
+The `publish` job of [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) publishes to `ghcr.io/lonestone/astrocms` on every push to `main`, once the `test` job passes. It reads the version from `packages/astrocms/package.json` and skips the build if that tag already exists on the registry. To ship a new image, bump the version in `packages/astrocms/package.json` and push to `main`. The job tags each successful build with `X.Y.Z`, `X.Y`, and `latest`, and builds for both `linux/amd64` and `linux/arm64`.
 
 ## Environment variables at a glance
 
