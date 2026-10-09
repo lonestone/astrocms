@@ -54,7 +54,6 @@
     "@lezer/highlight": "^1.2.5",
     "@mdxeditor/editor": "^4.3.2",
     "@tanstack/react-query": "^5.104.1",
-    "@types/diff": "^8.0.0",
     "ai": "^7.0.133",
     "ai-sdk-provider-claude-code": "^4.3.3",
     "cm6-graphql": "^0.2.2",
