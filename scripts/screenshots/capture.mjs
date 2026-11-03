@@ -335,7 +335,10 @@ try {
   await buildFrontend()
   server = await startServer()
 
-  browser = await chromium.launch({ headless: !headed })
+  browser = await chromium.launch({
+    headless: !headed,
+    chromiumSandbox: process.platform !== 'linux',
+  })
 
   for (const scene of SCENES) {
     if (only && scene.name !== only) continue
