@@ -44,8 +44,8 @@
     "postpack": "rm -f ./README.md"
   },
   "dependencies": {
-    "@assistant-ui/react": "0.15.25",
-    "@assistant-ui/react-ai-sdk": "1.4.16",
+    "@assistant-ui/react": "0.15.36",
+    "@assistant-ui/react-ai-sdk": "1.4.23",
     "@babel/parser": "^8.0.7",
     "@codemirror/language": "^6.13.1",
     "@codemirror/language-data": "^6.5.2",
@@ -56,7 +56,7 @@
     "@tanstack/react-query": "^5.104.1",
     "ai": "^7.0.133",
     "ai-sdk-provider-claude-code": "^4.3.3",
-    "cm6-graphql": "^0.2.2",
+    "cm6-graphql": "^1.0.0",
     "country-flag-icons": "^1.6.20",
     "diff": "^9.0.0",
     "dotenv": "^18.0.6",
@@ -92,8 +92,8 @@
     "overrides": "@assistant-ui publishes tightly-coupled packages whose semver ranges allow mutually incompatible combinations (e.g. a newer store drops an export that core still imports). The two direct deps above are pinned exact and these transitive ones are pinned here, so the Docker build's fresh `npm install` (no lockfile) resolves the same known-good tree we test locally."
   },
   "overrides": {
-    "@assistant-ui/core": "0.3.24",
-    "@assistant-ui/store": "0.3.17",
-    "@assistant-ui/tap": "0.9.21"
+    "@assistant-ui/core": "0.3.36",
+    "@assistant-ui/store": "0.3.23",
+    "@assistant-ui/tap": "0.9.26"
   }
 }
